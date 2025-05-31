@@ -2,4 +2,5 @@
 resources:
 - kubedevaiops_v1alpha1_foo.yaml
 - kubedevaiops_v1alpha1_managedapplication.yaml
+- kubedevaiops_v1alpha1_airequest.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples

@@ -7,6 +7,32 @@ rules:
 - apiGroups:
   - kubedevaiops.kubedevaiops.com
   resources:
+  - airequests
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - kubedevaiops.kubedevaiops.com
+  resources:
+  - airequests/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - kubedevaiops.kubedevaiops.com
+  resources:
+  - airequests/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - kubedevaiops.kubedevaiops.com
+  resources:
   - managedapplications
   verbs:
   - create

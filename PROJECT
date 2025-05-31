@@ -28,4 +28,13 @@ resources:
   kind: ManagedApplication
   path: github.com/kubedevaiops/kubedevaiops-operator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: kubedevaiops.com
+  group: kubedevaiops
+  kind: AIRequest
+  path: github.com/kubedevaiops/kubedevaiops-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"

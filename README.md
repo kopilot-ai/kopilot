@@ -96,6 +96,11 @@ Google Jules (or a similar advanced AI coding agent) will serve as the intellige
   * Proactively suggests or automatically implements optimizations such as workload right-sizing, instance type selection, and configuration tuning for better performance and reduced spend.  
 * **Natural** Language Interaction **(Future Goal):**  
   * Allow users to interact with the operator using natural language queries or commands (e.g., "KubeDevAIOps, analyze the performance of the checkout-service for the last hour," or "KubeDevAIOps, prepare the frontend application for a 5x traffic increase next Monday").
+*   **Natural Language Command Processing (Under Development):**
+    *   Introduced an `AIRequest` Custom Resource Definition (CRD).
+    *   Users can submit natural language prompts (e.g., "deploy nginx") via an `AIRequest` resource.
+    *   A basic controller for `AIRequest` is implemented. It currently acknowledges the request and populates status with placeholder proposed manifests and an AI explanation, setting the request to an "AwaitingApproval" state.
+    *   Future development will integrate this with the AI engine (Jules) to generate actual configurations and manage the approval and execution workflow.
 
 ## **5\. Development & Implementation (Powered by Jules)**
 
