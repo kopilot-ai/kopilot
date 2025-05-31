@@ -1,0 +1,12 @@
+apiVersion: kubedevaiops.kubedevaiops.com/v1alpha1
+kind: ManagedApplication
+metadata:
+  labels:
+    app.kubernetes.io/name: managedapplication
+    app.kubernetes.io/instance: managedapplication-sample
+    app.kubernetes.io/part-of: app
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: app
+  name: managedapplication-sample
+spec:
+  # TODO(user): Add fields here
