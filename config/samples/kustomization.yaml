@@ -1,0 +1,5 @@
+## Append samples of your project ##
+resources:
+- kubedevaiops_v1alpha1_foo.yaml
+- kubedevaiops_v1alpha1_managedapplication.yaml
+#+kubebuilder:scaffold:manifestskustomizesamples

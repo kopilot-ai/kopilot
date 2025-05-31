@@ -2,7 +2,7 @@
 
 **Vision:** To create a Kubernetes operator that leverages Artificial Intelligence, specifically powered by Google's Jules, to automate and intelligently manage the full lifecycle of applications on Kubernetes, aiming to significantly reduce the need for manual DevOps engineering.
 
-**Status:** Conceptual \- Exploring feasibility and roadmap.
+**Status:** Phase 1: Foundation & Proof of Concept \- In Progress. Initial operator scaffolding and CRD definition complete.
 
 ## **1\. Introduction & Motivation**
 
@@ -153,15 +153,42 @@ This project will be developed iteratively, leveraging Google Jules for AI-assis
     * Focus on advanced cost optimization and FinOps integration.  
     * Foster a community and explore open-sourcing key components.
 
-## **8\. Getting Started (Placeholder)**
+## 8\. Getting Started
 
-*(This section will be filled in as the project matures, detailing build instructions, installation guides, and contribution guidelines.)*
+This project is in its initial development phase. The basic operator scaffolding has been set up.
 
-\# Example (Future)  
-git clone \[https://github.com/your-org/kubedevaiops.git\](https://github.com/your-org/kubedevaiops.git)  
-cd kubedevaiops  
-make deploy-operator  
-kubectl apply \-f config/samples/app\_v1alpha1\_managedapplication.yaml
+**Prerequisites:**
+*   Go (version 1.21 or higher recommended)
+*   Docker (for building container images)
+*   kubectl (for interacting with a Kubernetes cluster)
+*   Access to a Kubernetes cluster (e.g., Kind, Minikube, or a cloud provider's K8s service)
+*   Operator SDK (v1.33.0 or compatible, though the Makefile handles its installation for generation tasks)
+
+**To clone the repository:**
+```bash
+git clone https://github.com/kubedevaiops/kubedevaiops-operator.git
+cd kubedevaiops-operator
+```
+
+**To build the operator container image:**
+```bash
+make docker-build IMG="your-repo/kubedevaiops-operator:latest"
+```
+*(Replace `your-repo/kubedevaiops-operator:latest` with your desired image name and tag.)*
+
+**To deploy the operator to your Kubernetes cluster:**
+*(Ensure your `kubectl` is configured to point to your target cluster.)*
+```bash
+make deploy IMG="your-repo/kubedevaiops-operator:latest"
+```
+
+**To create a sample ManagedApplication resource:**
+*(Example sample to be added to `config/samples/` in a future step.)*
+```bash
+# kubectl apply -f config/samples/kubedevaiops_v1alpha1_managedapplication.yaml
+```
+
+Further instructions on CRD usage and development workflows will be added as the project progresses.
 
 ## **9\. Contributing**
 
