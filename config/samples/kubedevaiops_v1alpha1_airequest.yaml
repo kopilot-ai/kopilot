@@ -1,0 +1,12 @@
+apiVersion: kubedevaiops.kubedevaiops.com/v1alpha1
+kind: AIRequest
+metadata:
+  labels:
+    app.kubernetes.io/name: airequest
+    app.kubernetes.io/instance: airequest-sample
+    app.kubernetes.io/part-of: kubedevaiops-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: kubedevaiops-operator
+  name: airequest-sample
+spec:
+  prompt: "Create a simple nginx deployment with 2 replicas, listening on port 80, and expose it via a ClusterIP service."
