@@ -6,7 +6,7 @@ import sys
 
 
 def setup_gemini():
-    os.environ["GEMINI_API_KEY"] = "AIzaSyDCjEPx-gxFqOgzVm2MqGfTA410mYx4uig"
+    os.environ["GEMINI_API_KEY"] = "A....g"
     os.environ["LLM_PROVIDER"] = "gemini"
     os.environ["GEMINI_MODEL"] = "gemini-2.5-flash"
     os.environ["LLM_MODEL"] = "gemini-2.5-flash"
