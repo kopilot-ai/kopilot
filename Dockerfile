@@ -1,33 +1,33 @@
-# Build the manager binary
-FROM golang:1.20 as builder
-ARG TARGETOS
-ARG TARGETARCH
+FROM python:3.13-slim AS base
 
-WORKDIR /workspace
-# Copy the Go Modules manifests
-COPY go.mod go.mod
-COPY go.sum go.sum
-# cache deps before building and copying source so that we don't need to re-download as much
-# and so that source changes don't invalidate our downloaded layer
-RUN go mod download
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl git ca-certificates && \
+    curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
+    install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && \
+    curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash && \
+    apt-get purge -y --auto-remove curl && \
+    rm -rf /var/lib/apt/lists/* kubectl
 
-# Copy the go source
-COPY cmd/main.go cmd/main.go
-COPY api/ api/
-COPY internal/controller/ internal/controller/
+RUN groupadd -r kubedevaiops && useradd -r -g kubedevaiops -d /app kubedevaiops
 
-# Build
-# the GOARCH has not a default value to allow the binary be built according to the host where the command
-# was called. For example, if we call make docker-build in a local env which has the Apple Silicon M1 SO
-# the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
-# by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
+WORKDIR /app
 
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot
-WORKDIR /
-COPY --from=builder /workspace/manager .
-USER 65532:65532
+COPY pyproject.toml .
+COPY src/kubedevaiops/__init__.py src/kubedevaiops/__init__.py
+RUN pip install --no-cache-dir .
 
-ENTRYPOINT ["/manager"]
+COPY src/ /app/src/
+RUN pip install --no-cache-dir --no-deps .
+
+RUN mkdir -p /home/kubedevaiops/.kubedevaiops && \
+    chown -R kubedevaiops:kubedevaiops /home/kubedevaiops
+
+USER kubedevaiops
+ENV PYTHONUNBUFFERED=1
+EXPOSE 8080 9090
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import httpx; r=httpx.get('http://localhost:8080/health'); assert r.status_code==200"
+
+ENTRYPOINT ["python", "-m", "kubedevaiops"]
+CMD ["serve"]

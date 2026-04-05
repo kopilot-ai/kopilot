@@ -1,0 +1,77 @@
+replicaCount: 1
+
+image:
+  repository: kubedevaiops/kubedevaiops
+  tag: latest
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: kubedevaiops
+
+# LLM configuration
+llm:
+  provider: ollama
+  model: "gpt-oss:20b"
+  temperature: "0.1"
+  maxTokens: "4096"
+  requestTimeout: "120"
+
+# Ollama endpoint (adjust for your cluster)
+ollama:
+  baseUrl: http://ollama.ollama.svc.cluster.local:11434
+
+# OpenAI (optional)
+openai:
+  apiKey: ""
+  model: gpt-4o
+
+# API server
+api:
+  host: "0.0.0.0"
+  port: 8080
+
+# Slack integration (optional)
+slack:
+  enabled: false
+  botToken: ""
+  appToken: ""
+  signingSecret: ""
+
+# Safety guardrails
+safety:
+  dryRunDefault: "false"
+  requireApprovalDestructive: "true"
+  maxConcurrentTasks: "5"
+  protectedNamespaces: '["kube-system","kube-public","kube-node-lease"]'
+
+# Built-in skills to enable (loaded from YAML definitions at startup)
+enabledSkills: '["security","administration","networking","monitoring","troubleshooting","cost_optimization"]'
+
+# Extra skill directories (colon-separated paths to custom YAML skills)
+# Mount a ConfigMap with custom skill YAMLs and reference the mount path here
+extraSkillDirs: ""
+
+# Observability
+observability:
+  logLevel: INFO
+  logFormat: json
+  metricsEnabled: true
+  metricsPort: 9090
+
+service:
+  type: ClusterIP
+  port: 8080
+  metricsPort: 9090
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
