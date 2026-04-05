@@ -1,0 +1,109 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubedevaiops
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubedevaiops-config
+  namespace: kubedevaiops
+data:
+  LLM_PROVIDER: "ollama"
+  LLM_MODEL: "gpt-oss:20b"
+  OLLAMA_BASE_URL: "http://host.docker.internal:11434"
+  API_PORT: "8080"
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+  SAFETY_DRY_RUN_DEFAULT: "false"
+  SAFETY_REQUIRE_APPROVAL_DESTRUCTIVE: "true"
+  ENABLED_SKILLS: '["security","administration","networking","monitoring","troubleshooting","cost_optimization"]'
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubedevaiops
+  namespace: kubedevaiops
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubedevaiops
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: kubedevaiops
+    namespace: kubedevaiops
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubedevaiops
+  namespace: kubedevaiops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubedevaiops
+  template:
+    metadata:
+      labels:
+        app: kubedevaiops
+    spec:
+      serviceAccountName: kubedevaiops
+      containers:
+        - name: agent
+          image: kubedevaiops/kubedevaiops:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - configMapRef:
+                name: kubedevaiops-config
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 10
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubedevaiops
+  namespace: kubedevaiops
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30080
+  selector:
+    app: kubedevaiops
+---
+# Sample AITask
+apiVersion: kubedevaiops.io/v1alpha1
+kind: AITask
+metadata:
+  name: health-check
+  namespace: kubedevaiops
+spec:
+  prompt: "Perform a full cluster health check and report any issues"
+  priority: normal
+  channel: operator

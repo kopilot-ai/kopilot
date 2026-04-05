@@ -1,0 +1,57 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: aiskills.kubedevaiops.io
+spec:
+  group: kubedevaiops.io
+  names:
+    kind: AISkill
+    listKind: AISkillList
+    plural: aiskills
+    singular: aiskill
+    shortNames: [ais]
+  scope: Cluster
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [enabled]
+              properties:
+                enabled:
+                  type: boolean
+                  default: true
+                description:
+                  type: string
+                category:
+                  type: string
+                config:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                  description: Skill-specific configuration overrides
+            status:
+              type: object
+              properties:
+                loaded:
+                  type: boolean
+                toolCount:
+                  type: integer
+                lastUpdated:
+                  type: string
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Enabled
+          type: boolean
+          jsonPath: .spec.enabled
+        - name: Category
+          type: string
+          jsonPath: .spec.category
+        - name: Tools
+          type: integer
+          jsonPath: .status.toolCount

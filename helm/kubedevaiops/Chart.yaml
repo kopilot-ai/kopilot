@@ -1,0 +1,17 @@
+apiVersion: v2
+name: kubedevaiops
+description: Autonomous AI-powered Kubernetes DevOps Agent
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - kubernetes
+  - aiops
+  - devops
+  - langchain
+  - autonomous-agent
+maintainers:
+  - name: Riadh HAJ AMOR
+home: https://github.com/kubedevaiops/kubedevaiops
+sources:
+  - https://github.com/kubedevaiops/kubedevaiops
