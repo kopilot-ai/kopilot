@@ -31,7 +31,7 @@ from kubedevaiops.skills.base import get_registry
 logger = structlog.get_logger(__name__)
 
 SUPERVISOR_PROMPT = """\
-You are **KubeDevAIOps**, an autonomous AI Kubernetes DevOps engineer.
+You are **Kopilot**, an autonomous AI Kubernetes operations engineer.
 
 You coordinate specialised sub-agents to handle complex cluster operations.
 Each sub-agent is a domain expert with its own knowledge and the ability

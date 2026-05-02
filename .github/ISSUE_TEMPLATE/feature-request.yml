@@ -1,0 +1,53 @@
+name: Feature request
+description: Propose a new Kopilot capability or workflow
+title: "[feature] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tell us what outcome you want Kopilot to achieve, not only the UI or command shape you imagine.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What operator pain are you trying to solve?
+      placeholder: It takes too long to identify over-provisioned workloads in shared clusters.
+    validations:
+      required: true
+  - type: textarea
+    id: desired_outcome
+    attributes:
+      label: What should Kopilot help you achieve?
+      placeholder: From one prompt, show waste hotspots and explain the safest next actions.
+    validations:
+      required: true
+  - type: dropdown
+    id: domain
+    attributes:
+      label: Which domain fits best?
+      options:
+        - Cost optimization
+        - Incident triage
+        - Security / RBAC
+        - Platform engineering
+        - MCP / integrations
+        - Website / docs
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Example prompt or workflow
+      description: Show the question, action, or workflow you want to become possible
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety or approval constraints
+      description: Tell us what the agent should never do automatically in this workflow
+  - type: textarea
+    id: proof
+    attributes:
+      label: Why does this matter?
+      description: Include evidence, examples, or impact where possible

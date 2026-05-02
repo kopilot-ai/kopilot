@@ -1,4 +1,4 @@
-"""KubeDevAIOps - Autonomous AI-powered Kubernetes DevOps Agent.
+"""Kopilot - Autonomous AI-powered Kubernetes operations agent.
 
 Multi-agent orchestration system for Kubernetes operations using LangChain v1+
 and LangGraph. Supports multiple LLM providers (Ollama, Gemini, OpenAI, etc.)

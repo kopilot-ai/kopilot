@@ -1,9 +1,10 @@
-"""CLI entry point for KubeDevAIOps."""
+"""CLI entry point for Kopilot."""
 
 from __future__ import annotations
 
 import asyncio
 import threading
+from typing import Literal, cast
 
 import click
 import structlog
@@ -34,7 +35,7 @@ def _configure_logging() -> None:
 
 @click.group()
 def cli():
-    """KubeDevAIOps - Autonomous AI Kubernetes DevOps Agent."""
+    """Kopilot - Autonomous AI Kubernetes operations agent."""
     _configure_logging()
 
 
@@ -94,6 +95,25 @@ def ask(prompt: str):
         click.echo(f"\n{result.get('answer', 'No response.')}\n")
 
     asyncio.run(_ask())
+
+
+@cli.command(name="mcp")
+@click.option(
+    "--transport",
+    default="stdio",
+    type=click.Choice(["stdio", "sse", "streamable-http"]),
+)
+@click.option("--host", default="127.0.0.1")
+@click.option("--port", default=8000, type=int)
+def mcp_server(transport: str, host: str, port: int):
+    """Run Kopilot as an MCP server."""
+    from kubedevaiops.mcp_server import serve_mcp
+
+    selected_transport = cast(
+        Literal["stdio", "sse", "streamable-http"],
+        transport,
+    )
+    serve_mcp(transport=selected_transport, host=host, port=port)
 
 
 def _start_operator_thread() -> threading.Thread:

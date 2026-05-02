@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Product roadmap
+    url: https://github.com/kopilot-ai/kopilot/blob/main/ROADMAP.md
+    about: See the current public roadmap before opening a broad feature request.
+  - name: Quick start and safety model
+    url: https://github.com/kopilot-ai/kopilot/blob/main/README.md
+    about: Check the README for the current CLI contract, trust model, and examples.
