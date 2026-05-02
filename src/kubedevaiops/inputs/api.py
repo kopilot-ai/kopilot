@@ -16,6 +16,11 @@ from kubedevaiops.agent.supervisor import run_task
 from kubedevaiops.agent.memory import TaskContext
 from kubedevaiops.config import get_settings
 from kubedevaiops.executor.middleware import get_execution_stats
+from kubedevaiops.interop import (
+    get_agent_manifest,
+    get_portable_skill_manifest,
+    list_portable_skill_manifests,
+)
 from kubedevaiops.outputs.audit import log_event
 from kubedevaiops.skills.base import get_registry
 
@@ -56,8 +61,8 @@ class WebhookPayload(BaseModel):
 def create_app() -> FastAPI:
     cfg = get_settings()
     app = FastAPI(
-        title="KubeDevAIOps",
-        description="Autonomous AI-powered Kubernetes DevOps Agent",
+        title="Kopilot",
+        description="Autonomous AI-powered Kubernetes operations agent",
         version="0.1.0",
     )
     app.add_middleware(
@@ -85,6 +90,25 @@ def create_app() -> FastAPI:
     @app.get("/skills")
     async def list_skills():
         return get_registry().list_details()
+
+    @app.get("/skills/portable")
+    async def list_portable_skills():
+        return list_portable_skill_manifests()
+
+    @app.get("/skills/portable/{name}")
+    async def portable_skill(name: str):
+        manifest = get_portable_skill_manifest(name)
+        if manifest is None:
+            raise HTTPException(status_code=404, detail=f"Unknown skill '{name}'")
+        return manifest
+
+    @app.get("/interop")
+    async def interop_manifest():
+        return get_agent_manifest()
+
+    @app.get("/.well-known/agent-manifest.json")
+    async def well_known_agent_manifest():
+        return get_agent_manifest()
 
     @app.get("/metrics", response_class=PlainTextResponse)
     async def metrics():

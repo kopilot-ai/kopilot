@@ -1,41 +1,94 @@
-# KubeDevAIOps
+# Kopilot
 
-**Autonomous AI-powered Kubernetes DevOps Agent**
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
+![License MIT](https://img.shields.io/badge/license-MIT-10B981)
+![Approval Gated](https://img.shields.io/badge/cluster_changes-approval--gated-F59E0B)
+![Self Hosted](https://img.shields.io/badge/deployment-self--hosted-111827)
 
-A fully autonomous multi-agent system that replaces a human DevOps engineer.
-Instead of hardcoded scripts, it uses **specialised sub-agents** — each a
-fully autonomous LLM agent with domain expertise, documentation, and the
-ability to execute any command against your cluster.
+**Find wasted Kubernetes spend before it lands on the bill.**
 
+Kopilot is an approval-gated AI operator for Kubernetes teams. It investigates
+over-provisioned workloads, idle resources, and orphaned storage from one
+prompt, explains the evidence in plain English, and recommends the next safe
+action.
+
+> Public CLI note: install the Python package as `kubedevaiops`, then run the
+> branded `kopilot` command. Internal package paths and Kubernetes API groups
+> still use `kubedevaiops` during the transition.
+
+**Built for**
+- Platform and DevOps teams managing noisy multi-namespace clusters
+- Operators who want self-hosted automation with audit logs
+- Teams that want recommendations first and approval before risky cleanup
+
+![Kopilot cost optimization walkthrough](docs/assets/kopilot-cost-demo.svg)
+
+## 30-Second Demo
+
+```bash
+pip install kubedevaiops
+kopilot ask "Find over-provisioned deployments and orphaned PVCs across all namespaces"
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Input Channels                           │
-│  REST API │ Slack │ Webhooks │ K8s Events │ CRD Operator    │
-└─────────────┬───────────────────────────────────────────────┘
-              │
-┌─────────────▼───────────────────────────────────────────────┐
-│                  Supervisor Agent                           │
-│  Classifies intent → delegates to specialised sub-agents    │
-│  Synthesises results → returns to user                      │
-└───┬─────────┬──────────┬──────────┬──────────┬──────────┬───┘
-    │         │          │          │          │          │
-┌───▼──┐ ┌───▼──┐ ┌─────▼──┐ ┌────▼───┐ ┌────▼───┐ ┌───▼───┐
-│ Sec  │ │Admin │ │Network │ │Monitor │ │Trouble │ │ FinOps│
-│Agent │ │Agent │ │ Agent  │ │ Agent  │ │ Agent  │ │ Agent │
-└──┬───┘ └──┬───┘ └───┬────┘ └───┬────┘ └───┬────┘ └──┬────┘
-   └────────┴─────────┴──────────┴──────────┴─────────┘
-                          │
-┌─────────────────────────▼───────────────────────────────────┐
-│              Generic Executor Middleware                     │
-│  run_kubectl │ run_helm │ run_shell │ read_resource          │
-│                                                             │
-│  Safety │ Audit │ Approval Gates │ Namespace Protection      │
-└─────────────────────────────────────────────────────────────┘
-                          │
-              ┌───────────▼───────────┐
-              │   Kubernetes Cluster  │
-              └───────────────────────┘
+
+What the first run should give you:
+- Evidence from cluster metrics and live object inspection
+- Plain-English explanation of where waste is coming from
+- Rightsizing and cleanup recommendations, with destructive follow-up left
+  behind approval gates
+
+## Safety Model
+
+- **Read-first by default**: investigations start with `get`, `describe`,
+  `logs`, and metrics collection before any mutation is considered.
+- **Approval-gated changes**: destructive actions such as deletes, drains, and
+  cordons require explicit approval.
+- **Protected namespaces**: high-risk namespaces are blocked from destructive
+  actions.
+- **Audit trail**: every delegated task and executed command is recorded.
+- **Self-hosted posture**: the core deployment model assumes you control the
+  cluster access path.
+
+![Kopilot architecture overview](docs/assets/kopilot-architecture.svg)
+
+## Cost Optimization Proof Pack
+
+| Use case | Prompt | Expected outcome |
+|----------|--------|------------------|
+| Rightsizing workloads | `Find over-provisioned deployments across all namespaces` | Highlights requests vs observed usage and suggests safer request targets |
+| Idle resource review | `Show me resources that look idle and worth review` | Flags low-usage workloads without auto-deleting them |
+| Orphaned storage | `List PVCs that are not attached to running workloads` | Surfaces old storage objects with namespace and age context |
+| Safe follow-up plan | `Recommend the next cost-saving actions for staging` | Produces an ordered plan that still keeps destructive cleanup approval-gated |
+
+## Project Surfaces
+
+- [Getting started](#quick-start)
+- [Roadmap](ROADMAP.md)
+- [Changelog](CHANGELOG.md)
+- [Issue templates](.github/ISSUE_TEMPLATE/)
+
+## AI-Native Interop
+
+Kopilot now exposes one concrete interop surface and two discovery surfaces:
+
+- `kopilot mcp` runs an MCP server for external agent clients
+- `GET /skills/portable` exposes enabled skills as portable manifests
+- `GET /.well-known/agent-manifest.json` exposes an async-first discovery document
+
+```bash
+kopilot mcp --transport stdio
 ```
+
+Current skill model:
+
+- **Built-in YAML skills** ship with the package
+- **Mounted YAML skills** can be loaded through `SKILL_DIRS`
+- **AISkill CRDs** are the planned next source and will map to the same portable manifest shape
+
+Agent-to-agent note:
+
+- MCP is the implemented tool-level interoperability layer today
+- ACP has folded into the broader agent-to-agent layer, so Kopilot keeps an async task API and
+  discovery manifest now instead of claiming full protocol support prematurely
 
 ## Key Architecture Principles
 
@@ -153,10 +206,10 @@ Set `SKILL_DIRS=/path/to/extra/skills` or mount a ConfigMap.
 ### Install & Run
 
 ```bash
-cd kubedevaiops
+cd kopilot
 pip install -e ".[dev]"
 cp .env.example .env    # Edit with your LLM provider settings
-python -m kubedevaiops api --port 8080
+kopilot serve --port 8080
 ```
 
 ### With Gemini
@@ -165,7 +218,7 @@ python -m kubedevaiops api --port 8080
 export LLM_PROVIDER=gemini
 export GEMINI_API_KEY=your-api-key
 export GEMINI_MODEL=gemini-2.5-flash
-python -m kubedevaiops api
+kopilot serve
 ```
 
 ### With local Ollama
@@ -174,7 +227,7 @@ python -m kubedevaiops api
 ollama pull qwen3:8b
 export LLM_PROVIDER=ollama
 export LLM_MODEL=qwen3:8b
-python -m kubedevaiops api
+kopilot serve
 ```
 
 ### Submit a Task
@@ -196,7 +249,7 @@ curl -X POST http://localhost:8080/tasks \
 ### One-shot CLI
 
 ```bash
-python -m kubedevaiops ask "What pods are running in kube-system?"
+kopilot ask "What pods are running in kube-system?"
 ```
 
 ## Configuration

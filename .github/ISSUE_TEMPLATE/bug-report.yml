@@ -1,0 +1,65 @@
+name: Bug report
+description: Report a reproducible Kopilot bug
+title: "[bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please include enough detail for us to reproduce the problem quickly.
+  - type: input
+    id: summary
+    attributes:
+      label: What broke?
+      description: One sentence summary of the failure
+      placeholder: kopilot ask hangs when the cluster has no metrics server
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface is affected?
+      options:
+        - CLI
+        - API
+        - Helm / Kubernetes deployment
+        - Slack
+        - Website / docs
+        - Skills / agent behavior
+    validations:
+      required: true
+  - type: textarea
+    id: prompt
+    attributes:
+      label: Prompt or action
+      description: Include the natural-language prompt or exact steps that triggered the issue
+      placeholder: |
+        kopilot ask "Find idle resources in staging"
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs, screenshots, or command output
+      description: Paste any relevant output, stack traces, or screenshots
+      render: shell
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Python version, Kubernetes distro, LLM provider, and anything else that matters
+      placeholder: |
+        Python 3.13
+        EKS 1.31
+        OpenAI gpt-4o

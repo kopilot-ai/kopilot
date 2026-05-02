@@ -16,6 +16,14 @@ def client():
     return TestClient(create_app())
 
 
+def test_app_metadata_branded():
+    app = create_app()
+    assert app.title == "Kopilot"
+    assert (
+        app.description == "Autonomous AI-powered Kubernetes operations agent"
+    )
+
+
 def test_health(client):
     resp = client.get("/health")
     assert resp.status_code == 200
@@ -33,6 +41,26 @@ def test_list_skills(client):
     resp = client.get("/skills")
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
+
+
+def test_list_portable_skills(client):
+    resp = client.get("/skills/portable")
+    assert resp.status_code == 200
+    assert any(skill["name"] == "cost_optimization" for skill in resp.json())
+
+
+def test_interop_manifest(client):
+    resp = client.get("/interop")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["protocols"]["mcp"]["status"] == "available"
+    assert data["protocols"]["portable_skills"]["status"] == "available"
+
+
+def test_well_known_agent_manifest(client):
+    resp = client.get("/.well-known/agent-manifest.json")
+    assert resp.status_code == 200
+    assert resp.json()["task_api"]["submit_endpoint"] == "/tasks"
 
 
 def test_metrics_endpoint(client):
