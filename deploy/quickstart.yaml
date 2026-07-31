@@ -28,7 +28,6 @@ data:
   API_PORT: "8080"
   LOG_LEVEL: "INFO"
   LOG_FORMAT: "json"
-  SAFETY_DRY_RUN_DEFAULT: "false"
   SAFETY_REQUIRE_APPROVAL_DESTRUCTIVE: "true"
   ENABLED_SKILLS: '["security","administration","networking","monitoring","troubleshooting","cost_optimization"]'
 ---

@@ -215,3 +215,28 @@ async def test_risk_level_recorded_for_task(mock_subprocess):
     assert max_recorded_risk() == "low"
     await run_kubectl.ainvoke({"command": "kubectl delete pod x -n staging"})
     assert max_recorded_risk() == "high"
+
+
+class TestBlockedPatternBypasses:
+    """Root-deletion forms that must not slip past the shell denylist."""
+
+    @pytest.mark.parametrize("cmd", [
+        "rm -rf --no-preserve-root /;",
+        "rm --no-preserve-root -rf /; echo x",
+        "bash -c 'rm -rf --no-preserve-root /'",
+        'sh -c "rm -rf --no-preserve-root /"',
+        "rm -rf /;",
+        "rm -rf /)",
+        "rm -rf /|tee out",
+        "chmod 000 /",
+        "dd if=/dev/zero of=/dev/sda",
+        "shutdown -h now",
+    ])
+    def test_root_destruction_variants_blocked(self, cmd):
+        verdict = _pre_flight(cmd)
+        assert not verdict.allowed, cmd
+        assert not verdict.requires_approval, cmd
+
+    @pytest.mark.parametrize("cmd", ["rm -rf ./build", "rm -rf /tmp/scratch", "rm -f notes.txt"])
+    def test_ordinary_removals_still_allowed(self, cmd):
+        assert _pre_flight(cmd).allowed, cmd

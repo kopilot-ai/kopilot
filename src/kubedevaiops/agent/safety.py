@@ -25,10 +25,20 @@ logger = structlog.get_logger(__name__)
 DESTRUCTIVE_VERBS = {"delete", "drain", "cordon", "taint", "replace", "patch", "scale", "evict"}
 HIGH_RISK_RESOURCES = {"node", "namespace", "persistentvolume", "clusterrole", "clusterrolebinding"}
 
-# kubectl verbs that mutate cluster state (destructive or not)
+# kubectl verbs that mutate cluster state (destructive or not).  `exec`, `cp`,
+# `attach`, and `port-forward` are included because they carry an arbitrary
+# payload into a running container: the safety layer cannot introspect what
+# runs on the far side of `--`, so they are treated as state-changing.
 _KUBECTL_MUTATING_VERBS = (
     "delete|drain|cordon|uncordon|taint|replace|patch|scale|edit|apply|create|"
-    "label|annotate|rollout|set|expose|autoscale|evict"
+    "label|annotate|rollout|set|expose|autoscale|evict|exec|cp|attach|port-forward"
+)
+
+# Verbs whose payload the gate cannot inspect. They are approval-gated rather
+# than blocked outright, since `kubectl exec` is a normal diagnostic tool.
+_OPAQUE_PAYLOAD_PAT = re.compile(
+    r"kubectl\s+(?:[^|;&]*\s)?(?:exec|cp|attach)\b",
+    re.IGNORECASE,
 )
 
 # Destructive command detection.  Whitespace inside a command is normalised
@@ -71,8 +81,12 @@ class SafetyVerdict:
     requires_approval: bool = False
 
 
-def _normalize(command: str) -> str:
+def normalize_command(command: str) -> str:
+    """Collapse whitespace so pattern checks and approval matching agree."""
     return " ".join(command.split())
+
+
+_normalize = normalize_command
 
 
 def is_destructive(command: str) -> bool:
@@ -103,8 +117,12 @@ def assess_command(command: str) -> SafetyVerdict:
     normalized = _normalize(command)
 
     destructive = bool(_DESTRUCTIVE_PAT.search(normalized))
+    opaque = bool(_OPAQUE_PAYLOAD_PAT.search(normalized))
 
-    if destructive:
+    # A command whose payload cannot be inspected (`kubectl exec … -- …`,
+    # `cp`, `attach`) can destroy from inside a pod, so it is treated exactly
+    # like a destructive command for namespace protection and approval.
+    if destructive or opaque:
         target_ns = _protected_ns_hit(normalized, cfg.protected_namespaces)
         if target_ns:
             return SafetyVerdict(
@@ -113,6 +131,18 @@ def assess_command(command: str) -> SafetyVerdict:
                 reason=f"Destructive operation on protected namespace '{target_ns}' is blocked.",
             )
 
+    if opaque and not destructive:
+        return SafetyVerdict(
+            allowed=not cfg.require_approval_destructive,
+            risk=RiskLevel.HIGH,
+            reason=(
+                "Command carries a payload into a container that cannot be "
+                "safety-checked; approval required."
+            ),
+            requires_approval=cfg.require_approval_destructive,
+        )
+
+    if destructive:
         if _ALL_NS_PAT.search(normalized):
             return SafetyVerdict(
                 allowed=False,
@@ -144,41 +174,3 @@ def assess_command(command: str) -> SafetyVerdict:
 
     return SafetyVerdict(allowed=True, risk=RiskLevel.LOW, reason="OK")
 
-
-def assess_action(verb: str, resource: str, namespace: str | None = None) -> SafetyVerdict:
-    """Structured assessment: verb + resource + optional namespace."""
-    cfg = get_settings().safety
-    verb_lower = verb.lower()
-    res_lower = resource.lower()
-
-    if namespace in cfg.protected_namespaces and verb_lower in DESTRUCTIVE_VERBS:
-        return SafetyVerdict(
-            allowed=False,
-            risk=RiskLevel.CRITICAL,
-            reason=f"Cannot {verb} {resource} in protected namespace '{namespace}'.",
-        )
-
-    if verb_lower in DESTRUCTIVE_VERBS and res_lower in HIGH_RISK_RESOURCES:
-        return SafetyVerdict(
-            allowed=False,
-            risk=RiskLevel.CRITICAL,
-            reason=f"Destructive operation on cluster-scoped resource '{resource}' blocked.",
-            requires_approval=True,
-        )
-
-    if verb_lower in DESTRUCTIVE_VERBS:
-        return SafetyVerdict(
-            allowed=not cfg.require_approval_destructive,
-            risk=RiskLevel.HIGH,
-            reason=f"Destructive verb '{verb}' requires approval.",
-            requires_approval=cfg.require_approval_destructive,
-        )
-
-    if cfg.dry_run_default:
-        return SafetyVerdict(
-            allowed=True,
-            risk=RiskLevel.MEDIUM,
-            reason="Allowed in dry-run mode.",
-        )
-
-    return SafetyVerdict(allowed=True, risk=RiskLevel.LOW, reason="OK")

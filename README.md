@@ -294,8 +294,7 @@ All settings via environment variables or `.env` file:
 | `ENABLED_SKILLS` | all 6 built-ins | JSON list of skill names |
 | `SKILL_DIRS` | (empty) | Extra dirs (`;`-separated on Windows, `:`-separated on Linux) |
 | `LOG_FORMAT` | `json` | `json` or `console` |
-| `METRICS_ENABLED` | `true` | Enable `/metrics` endpoint |
-| `METRICS_PORT` | `9090` | Prometheus metrics port |
+| `LOG_LEVEL` | `INFO` | Log level filter |
 
 ## Deployment
 
@@ -303,7 +302,7 @@ All settings via environment variables or `.env` file:
 
 ```bash
 helm install kubedevaiops ./helm/kubedevaiops \
-  --set llm.ollamaUrl=http://ollama:11434 \
+  --set ollama.baseUrl=http://ollama:11434 \
   --set llm.model="gpt-oss:20b"
 ```
 
@@ -332,6 +331,9 @@ spec:
 | `/health` | GET | open | Health check with skills count and LLM provider |
 | `/readyz` | GET | open | Readiness probe |
 | `/skills` | GET | open | List loaded skills |
+| `/skills/portable` | GET | open | Skills as portable manifests |
+| `/interop` | GET | open | Agent interoperability manifest |
+| `/.well-known/agent-manifest.json` | GET | open | Discovery document |
 | `/tasks` | POST | bearer | Submit a task (accepts `prompt`, `reflect`, `namespace`) |
 | `/tasks/history` | GET | bearer | Recent task history (configurable `?limit=`) |
 | `/approvals` | GET | bearer | List approval requests (`?status=pending`) |

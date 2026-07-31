@@ -19,10 +19,8 @@ data:
   AZURE_OPENAI_DEPLOYMENT: {{ .Values.azureOpenai.deployment | quote }}
   AZURE_OPENAI_API_VERSION: {{ .Values.azureOpenai.apiVersion | quote }}
   {{- end }}
-  K8S_NAMESPACE: {{ .Release.Namespace | quote }}
   API_HOST: {{ .Values.api.host | quote }}
   API_PORT: {{ .Values.api.port | quote }}
-  SAFETY_DRY_RUN_DEFAULT: {{ .Values.safety.dryRunDefault | quote }}
   SAFETY_REQUIRE_APPROVAL_DESTRUCTIVE: {{ .Values.safety.requireApprovalDestructive | quote }}
   SAFETY_MAX_CONCURRENT_TASKS: {{ .Values.safety.maxConcurrentTasks | quote }}
   SAFETY_PROTECTED_NAMESPACES: {{ .Values.safety.protectedNamespaces | quote }}
@@ -36,5 +34,3 @@ data:
   {{- end }}
   LOG_LEVEL: {{ .Values.observability.logLevel | quote }}
   LOG_FORMAT: {{ .Values.observability.logFormat | quote }}
-  METRICS_ENABLED: {{ .Values.observability.metricsEnabled | quote }}
-  METRICS_PORT: {{ .Values.observability.metricsPort | quote }}

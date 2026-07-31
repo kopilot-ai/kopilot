@@ -7,7 +7,43 @@ release companion for future tags and GitHub releases.
 
 ## [Unreleased]
 
-Nothing yet.
+### Security
+
+- **Shell denylist bypass closed**: the root-deletion guard only fired when the
+  path was followed by whitespace or end-of-string, so any trailing character
+  defeated it — `rm -rf --no-preserve-root /;` and `sh -c 'rm -rf /'` both
+  reached the executor. Patterns now terminate on any shell boundary,
+  `--no-preserve-root` is blocked outright whatever the target, and
+  `chown`/`chmod` on `/`, `init 0`, and raw writes to block devices are added.
+- **`kubectl exec`/`cp`/`attach` are no longer unguarded**: these carry an
+  opaque payload into a running container, so `kubectl exec -n kube-system
+  etcd-master -- etcdctl del / --prefix` previously rated LOW and executed.
+  They are now treated as state-changing: refused outright against protected
+  namespaces, approval-gated everywhere else.
+
+### Changed
+
+- `LOG_LEVEL` is applied (it configured nothing before)
+- Version is single-sourced from `__version__` across the API, health
+  endpoint, and interop manifest
+- Approval store drops settled requests past their retention window instead of
+  growing one entry per gated command
+- `AITask.spec.reflect` added to the CRD schema — the operator read it but the
+  structural schema pruned it, so it was always false
+- Helm chart no longer publishes a metrics port nothing listens on
+  (`/metrics` is served on the API port)
+
+### Removed
+
+- Dead settings that silently did nothing: `SAFETY_DRY_RUN_DEFAULT` (and the
+  uncalled `assess_action` path it fed), `K8S_NAMESPACE`/`KUBECONFIG`
+  (`K8sSettings` was never read), `SLACK_ENABLED`, `METRICS_ENABLED`,
+  `METRICS_PORT`
+
+### Fixed
+
+- README: Helm example used a value key that does not exist
+  (`llm.ollamaUrl` → `ollama.baseUrl`); interop endpoints added to the API table
 
 ## [0.2.0] - 2026-07-31
 

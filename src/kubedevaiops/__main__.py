@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 from typing import Literal, cast
 
@@ -28,7 +29,9 @@ def _configure_logging() -> None:
                 else structlog.dev.ConsoleRenderer()
             ),
         ],
-        wrapper_class=structlog.stdlib.BoundLogger,
+        wrapper_class=structlog.make_filtering_bound_logger(
+            logging.getLevelNamesMapping().get(cfg.log_level.upper(), logging.INFO)
+        ),
         logger_factory=structlog.PrintLoggerFactory(),
     )
 

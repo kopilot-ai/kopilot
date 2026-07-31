@@ -102,3 +102,25 @@ def test_classifier_helpers():
     assert not is_destructive("kubectl get pod x")
     assert is_mutating("kubectl apply -f x.yaml")
     assert not is_mutating("kubectl get pods")
+
+
+# ── Opaque-payload verbs (kubectl exec / cp / attach) ───────────────────────
+
+
+@pytest.mark.parametrize("cmd", [
+    "kubectl exec -n kube-system etcd-master -- etcdctl del / --prefix",
+    "kubectl cp /etc/passwd kube-system/pod:/tmp/x",
+    "kubectl attach -n kube-public somepod",
+])
+def test_opaque_payload_into_protected_namespace_blocked(cmd):
+    v = assess_command(cmd)
+    assert not v.allowed and v.risk == RiskLevel.CRITICAL, cmd
+
+
+@pytest.mark.parametrize("cmd", [
+    "kubectl exec -n staging api-pod -- rm -rf /data",
+    "kubectl cp ./payload staging/api-pod:/tmp/payload",
+])
+def test_opaque_payload_requires_approval(cmd):
+    v = assess_command(cmd)
+    assert v.requires_approval and not v.allowed, cmd

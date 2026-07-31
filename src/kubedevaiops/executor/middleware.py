@@ -32,14 +32,25 @@ MAX_OUTPUT = 12_000
 MAX_CAPTURE_BYTES = 2_000_000
 DEFAULT_TIMEOUT = 90
 
+# A shell-string denylist is inherently leaky and is only the last of several
+# layers (RBAC first, then the safety assessor). These patterns cover the
+# unambiguously catastrophic forms, terminated on any shell boundary character
+# so a trailing quote, semicolon, or paren cannot slip past the anchor.
+_ROOT_END = r"(?:[\s'\";&|)]|$|\*)"
 _BLOCKED_PATTERNS = re.compile(
-    r"rm\s+(?:-[a-z-]+\s+)*(?:-[a-z]*[rf][a-z]*\s+)+(?:--no-preserve-root\s+)?/(?:\s|$|\*)|"
+    # rm with recursive and/or force flags aimed at /
+    rf"\brm\s+(?:-[a-zA-Z-]+\s+)*-[a-zA-Z-]*[rRf][a-zA-Z-]*\s+(?:-[a-zA-Z-]+\s+)*/{_ROOT_END}|"
+    rf"\brm\s+(?:[^|;&]*\s)?--(?:recursive|force)\b[^|;&]*\s/{_ROOT_END}|"
+    # --no-preserve-root is never legitimate here, whatever the target
+    r"--no-preserve-root\b|"
     r":\(\)\s*\{.*\};\s*:|"
     r"mkfs\.|"
     r"\bdd\s+[^|;&]*of=/dev/|"
-    r"\bshutdown\b|\breboot\b|\bhalt\b|"
-    r"\bchmod\s+(?:-[rR]+\s+)?000\s+/|"
-    r"\bfind\s+/\s+.*-delete",
+    r"\bshutdown\b|\breboot\b|\bhalt\b|\binit\s+0\b|"
+    rf"\bchmod\s+(?:-[a-zA-Z]+\s+)*0*000\s+/{_ROOT_END}|"
+    rf"\bchown\s+(?:-[a-zA-Z]+\s+)*\S+\s+/{_ROOT_END}|"
+    r"\bfind\s+/\s+[^|;&]*-delete\b|"
+    r">\s*/dev/[sh]d[a-z]\b",
     re.IGNORECASE,
 )
 

@@ -66,13 +66,6 @@ class GeminiSettings(BaseSettings):
     model: str = "gemini-2.5-flash"
 
 
-class K8sSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="K8S_", extra="ignore")
-
-    kubeconfig: str = Field(default="", alias="KUBECONFIG")
-    namespace: str = "kubedevaiops"
-
-
 class APISettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="API_", extra="ignore")
 
@@ -95,7 +88,6 @@ class SlackSettings(BaseSettings):
     bot_token: str = ""
     app_token: str = ""
     signing_secret: str = ""
-    enabled: bool = False
     # Slack user IDs allowed to run tasks. Empty list = allow all workspace
     # members (not recommended outside sandboxes).
     allowed_users: list[str] = []
@@ -104,7 +96,6 @@ class SlackSettings(BaseSettings):
 class SafetySettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="SAFETY_", extra="ignore")
 
-    dry_run_default: bool = False
     require_approval_destructive: bool = True
     max_concurrent_tasks: int = 5
     protected_namespaces: list[str] = [
@@ -141,7 +132,6 @@ class Settings(BaseSettings):
     azure_openai: AzureOpenAISettings = Field(default_factory=AzureOpenAISettings)
     anthropic: AnthropicSettings = Field(default_factory=AnthropicSettings)
     gemini: GeminiSettings = Field(default_factory=GeminiSettings)
-    k8s: K8sSettings = Field(default_factory=K8sSettings)
     api: APISettings = Field(default_factory=APISettings)
     slack: SlackSettings = Field(default_factory=SlackSettings)
     safety: SafetySettings = Field(default_factory=SafetySettings)
