@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
+from kubedevaiops import __version__
 from kubedevaiops.agent.memory import TaskContext
 from kubedevaiops.agent.supervisor import run_task
 from kubedevaiops.config import get_settings
@@ -153,7 +154,7 @@ def create_app(with_event_watcher: bool = False) -> FastAPI:
     app = FastAPI(
         title="Kopilot",
         description="Approval-gated AI Kubernetes operations agent",
-        version="0.2.0",
+        version=__version__,
         lifespan=lifespan,
     )
     if cfg.api.cors_origins:
@@ -172,7 +173,7 @@ def create_app(with_event_watcher: bool = False) -> FastAPI:
         reg = get_registry()
         return HealthResponse(
             status="healthy",
-            version="0.2.0",
+            version=__version__,
             skills_loaded=len(reg.list_names()),
             llm_provider=cfg.llm.provider.value,
         )

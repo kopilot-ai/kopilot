@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from kubedevaiops import __version__
 from kubedevaiops.config import get_settings
 from kubedevaiops.skills.loader import SkillDefinition, discover_skills
 
-PRODUCT_VERSION = "0.2.0"
+PRODUCT_VERSION = __version__
 PUBLIC_REPO_URL = "https://github.com/kopilot-ai/kopilot"
 PUBLIC_SITE_URL = "https://kopilot-ai.github.io"
 

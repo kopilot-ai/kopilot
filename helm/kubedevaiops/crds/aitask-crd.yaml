@@ -51,6 +51,10 @@ spec:
                 dryRun:
                   type: boolean
                   default: false
+                reflect:
+                  type: boolean
+                  default: false
+                  description: Run the self-review loop before returning
                 namespace:
                   type: string
                   description: Target namespace for the operation

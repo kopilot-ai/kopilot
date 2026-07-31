@@ -1,4 +1,4 @@
-KubeDevAIOps has been deployed!
+Kopilot has been deployed.
 
 1. Get the API endpoint:
   {{- if eq .Values.service.type "ClusterIP" }}

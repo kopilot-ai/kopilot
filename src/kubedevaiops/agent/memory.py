@@ -7,7 +7,6 @@ a Postgres checkpointer (langgraph-checkpoint-postgres) via get_checkpointer.
 
 from __future__ import annotations
 
-import pathlib
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -18,8 +17,6 @@ from langgraph.checkpoint.memory import MemorySaver
 
 logger = structlog.get_logger(__name__)
 
-DEFAULT_DB_DIR = pathlib.Path.home() / ".kubedevaiops"
-DEFAULT_DB_PATH = DEFAULT_DB_DIR / "checkpoints.db"
 
 
 @dataclass

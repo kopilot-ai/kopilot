@@ -62,8 +62,8 @@ api:
   webhookSecret: ""
 
 # Slack integration (optional)
+# The Slack bot starts when both tokens are set.
 slack:
-  enabled: false
   botToken: ""
   appToken: ""
   signingSecret: ""
@@ -72,7 +72,6 @@ slack:
 
 # Safety guardrails
 safety:
-  dryRunDefault: "false"
   requireApprovalDestructive: "true"
   maxConcurrentTasks: "5"
   protectedNamespaces: '["kube-system","kube-public","kube-node-lease"]'
@@ -87,16 +86,15 @@ enabledSkills: '["security","administration","networking","monitoring","troubles
 customSkillsConfigMap: ""
 
 # Observability
+# Prometheus metrics are served on the API port at /metrics (bearer-protected
+# when an auth token is set) — there is no separate metrics listener.
 observability:
   logLevel: INFO
   logFormat: json
-  metricsEnabled: true
-  metricsPort: 9090
 
 service:
   type: ClusterIP
   port: 8080
-  metricsPort: 9090
 
 podSecurityContext:
   runAsNonRoot: true

@@ -21,6 +21,7 @@ from enum import StrEnum
 
 import structlog
 
+from kubedevaiops.agent.safety import normalize_command as _normalize
 from kubedevaiops.outputs.audit import log_event
 
 logger = structlog.get_logger(__name__)
@@ -35,10 +36,6 @@ class ApprovalStatus(StrEnum):
     DENIED = "denied"
     CONSUMED = "consumed"
     EXPIRED = "expired"
-
-
-def _normalize(command: str) -> str:
-    return " ".join(command.split())
 
 
 @dataclass
@@ -77,12 +74,24 @@ class ApprovalStore:
 
     def _expire_locked(self) -> None:
         now = time.time()
+        # Settled requests are kept briefly for operator visibility, then
+        # dropped so a long-lived process does not grow one entry per command.
+        for key in [
+            k for k, r in self._requests.items()
+            if r.status is not ApprovalStatus.PENDING
+            and now - (r.decided_at or r.created_at) > self._ttl * 4
+        ]:
+            del self._requests[key]
         for req in self._requests.values():
-            if req.status is ApprovalStatus.PENDING and now - req.created_at > self._ttl or (
+            expired_pending = (
+                req.status is ApprovalStatus.PENDING and now - req.created_at > self._ttl
+            )
+            expired_approval = (
                 req.status is ApprovalStatus.APPROVED
                 and req.decided_at is not None
                 and now - req.decided_at > self._ttl
-            ):
+            )
+            if expired_pending or expired_approval:
                 req.status = ApprovalStatus.EXPIRED
 
     def request(self, command: str, tool: str, reason: str, risk: str) -> ApprovalRequest:
