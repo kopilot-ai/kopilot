@@ -6,7 +6,7 @@ etc.) is recorded here for compliance and observability.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -18,6 +18,6 @@ def log_event(event_type: str, **kwargs: Any) -> None:
     """Write an audit entry with ISO-8601 timestamp."""
     audit_logger.info(
         event_type,
-        timestamp=datetime.now(timezone.utc).isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
         **kwargs,
     )

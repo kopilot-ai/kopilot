@@ -15,10 +15,18 @@ spec:
         {{- include "kubedevaiops.selectorLabels" . | nindent 8 }}
     spec:
       serviceAccountName: {{ include "kubedevaiops.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: agent
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.api.port }}
@@ -29,9 +37,20 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "kubedevaiops.fullname" . }}-config
+            {{- if .Values.existingSecret }}
+            - secretRef:
+                name: {{ .Values.existingSecret }}
+            {{- else }}
             - secretRef:
                 name: {{ include "kubedevaiops.fullname" . }}-secrets
                 optional: true
+            {{- end }}
+          {{- if .Values.customSkillsConfigMap }}
+          volumeMounts:
+            - name: custom-skills
+              mountPath: /etc/kubedevaiops/skills
+              readOnly: true
+          {{- end }}
           livenessProbe:
             httpGet:
               path: /health
@@ -46,6 +65,12 @@ spec:
             periodSeconds: 10
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+      {{- if .Values.customSkillsConfigMap }}
+      volumes:
+        - name: custom-skills
+          configMap:
+            name: {{ .Values.customSkillsConfigMap }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

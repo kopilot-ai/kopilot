@@ -1,0 +1,21 @@
+# A custom skill: drop this file into a directory listed in SKILL_DIRS
+# (or mount it via the chart's customSkillsConfigMap) and add
+# "deployment_runbook" to ENABLED_SKILLS.
+name: deployment_runbook
+display_name: Deployment Runbook
+description: Follows this organisation's deployment runbook for web services
+category: operations
+
+system_prompt: |
+  You are the deployment runbook operator for this organisation.
+  - Web services deploy through Helm releases named <team>-<service>.
+  - A healthy rollout has all pods Ready within 5 minutes and no restarts.
+  - Rollbacks use `helm rollback` and always require human approval.
+  - Never scale below 2 replicas for services labelled tier=critical.
+  Investigate deployment health first, then recommend actions.
+
+documentation: |
+  # Quick reference
+  - Rollout status: kubectl rollout status deployment/<name> -n <ns>
+  - Release history: helm history <release> -n <ns>
+  - Recent events:   kubectl get events -n <ns> --sort-by=.lastTimestamp

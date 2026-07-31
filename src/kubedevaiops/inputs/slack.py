@@ -35,16 +35,22 @@ def start_slack_bot() -> threading.Thread | None:
             await _handle(event, say)
 
     async def _handle(event: dict, say):
-        from kubedevaiops.agent.supervisor import run_task
         from kubedevaiops.agent.memory import TaskContext
+        from kubedevaiops.agent.supervisor import run_task
 
         text = event.get("text", "").strip()
         if not text:
             return
 
+        user = event.get("user", "")
+        if cfg.allowed_users and user not in cfg.allowed_users:
+            log_event("slack.denied", user=user)
+            await say("Sorry, you are not authorised to run Kopilot tasks.")
+            return
+
         task_id = str(uuid.uuid4())
-        ctx = TaskContext(task_id=task_id, channel="slack", user=event.get("user", ""))
-        log_event("slack.message", task_id=task_id)
+        ctx = TaskContext(task_id=task_id, channel="slack", user=user)
+        log_event("slack.message", task_id=task_id, user=user)
 
         await say(f"Working on it (`{task_id}`)...")
         try:

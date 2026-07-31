@@ -1,9 +1,9 @@
 apiVersion: v2
 name: kubedevaiops
-description: Autonomous AI-powered Kubernetes DevOps Agent
+description: Kopilot - approval-gated AI Kubernetes operations agent
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.2.0
+appVersion: "0.2.0"
 keywords:
   - kubernetes
   - aiops
@@ -12,6 +12,6 @@ keywords:
   - autonomous-agent
 maintainers:
   - name: Riadh HAJ AMOR
-home: https://github.com/kubedevaiops/kubedevaiops
+home: https://github.com/kopilot-ai/kopilot
 sources:
-  - https://github.com/kubedevaiops/kubedevaiops
+  - https://github.com/kopilot-ai/kopilot

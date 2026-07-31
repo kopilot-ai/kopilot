@@ -1,0 +1,14 @@
+apiVersion: kubedevaiops.io/v1alpha1
+kind: AIPolicy
+metadata:
+  name: default-guardrails
+  namespace: kubedevaiops
+spec:
+  description: "Baseline guardrails for the Kopilot agent"
+  rules:
+    - action: delete
+      resource: "*"
+      effect: require-approval
+    - action: "*"
+      resource: "namespaces/kube-system"
+      effect: deny

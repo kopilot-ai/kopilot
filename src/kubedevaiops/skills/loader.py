@@ -12,8 +12,7 @@ an autonomous sub-agent via the sub-agent factory.
 from __future__ import annotations
 
 import pathlib
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 import structlog
 import yaml

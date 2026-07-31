@@ -1,6 +1,6 @@
 """Tests for skill loading and registry."""
 
-from kubedevaiops.skills.loader import discover_skills, BUILTIN_DIR
+from kubedevaiops.skills.loader import BUILTIN_DIR, discover_skills
 
 
 def test_builtin_yaml_files_exist():

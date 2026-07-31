@@ -1,3 +1,13 @@
+# Kopilot quickstart manifest — FOR LAB/EVALUATION CLUSTERS ONLY.
+#
+# Apply CRDs first:   kubectl apply -f helm/kubedevaiops/crds/
+# Then this file:     kubectl apply -f deploy/quickstart.yaml
+#
+# The service account below gets a scoped ClusterRole (read-most, write on
+# workloads). Review it before applying, and prefer the Helm chart for
+# anything beyond a first look. The API is exposed on NodePort 30080 with no
+# auth token set — do not use this manifest on a shared or reachable cluster
+# without setting API_AUTH_TOKEN.
 ---
 apiVersion: v1
 kind: Namespace
@@ -12,6 +22,8 @@ metadata:
 data:
   LLM_PROVIDER: "ollama"
   LLM_MODEL: "gpt-oss:20b"
+  # host.docker.internal resolves on Docker Desktop (macOS/Windows).
+  # On Linux kind clusters use your host IP or an in-cluster Ollama Service.
   OLLAMA_BASE_URL: "http://host.docker.internal:11434"
   API_PORT: "8080"
   LOG_LEVEL: "INFO"
@@ -27,13 +39,53 @@ metadata:
   namespace: kubedevaiops
 ---
 apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubedevaiops-quickstart
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services", "endpoints", "events",
+                "configmaps", "namespaces", "nodes",
+                "persistentvolumes", "persistentvolumeclaims",
+                "serviceaccounts", "resourcequotas", "limitranges"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: ["kubedevaiops.io"]
+    resources: ["aitasks", "aitasks/status", "aiskills", "aiskills/status",
+                "aipolicies", "aipolicies/status"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: kubedevaiops
+  name: kubedevaiops-quickstart
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: cluster-admin
+  name: kubedevaiops-quickstart
 subjects:
   - kind: ServiceAccount
     name: kubedevaiops
@@ -55,10 +107,18 @@ spec:
         app: kubedevaiops
     spec:
       serviceAccountName: kubedevaiops
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: agent
-          image: kubedevaiops/kubedevaiops:latest
+          image: ghcr.io/kopilot-ai/kopilot:latest
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           ports:
             - containerPort: 8080
               name: http
@@ -96,14 +156,3 @@ spec:
       nodePort: 30080
   selector:
     app: kubedevaiops
----
-# Sample AITask
-apiVersion: kubedevaiops.io/v1alpha1
-kind: AITask
-metadata:
-  name: health-check
-  namespace: kubedevaiops
-spec:
-  prompt: "Perform a full cluster health check and report any issues"
-  priority: normal
-  channel: operator

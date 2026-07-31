@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mcp.server.fastmcp import FastMCP  # type: ignore[import-not-found]  # pylint: disable=import-error,no-name-in-module
+from mcp.server.mcpserver import MCPServer
 
 from kubedevaiops.interop import (  # type: ignore[import-untyped]
     get_agent_manifest,
@@ -36,7 +36,7 @@ def test_portable_skill_list_contains_enabled_skills():
     assert "security" in names
 
 
-def test_create_mcp_server_returns_fastmcp():
+def test_create_mcp_server_returns_mcpserver():
     server = create_mcp_server()
 
-    assert isinstance(server, FastMCP)
+    assert isinstance(server, MCPServer)
