@@ -1,0 +1,10 @@
+# Cost-optimization review with the self-review (reflection) loop enabled.
+apiVersion: kubedevaiops.io/v1alpha1
+kind: AITask
+metadata:
+  name: cost-review
+  namespace: kubedevaiops
+spec:
+  prompt: "Find over-provisioned deployments and orphaned PVCs across all namespaces. Compare requests to observed usage and recommend right-sizing targets. Do not delete anything."
+  priority: low
+  skills: [cost_optimization]

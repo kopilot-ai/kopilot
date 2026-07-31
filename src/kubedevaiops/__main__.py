@@ -55,16 +55,18 @@ def serve(host: str | None, port: int | None):
     from kubedevaiops.inputs.slack import start_slack_bot
     start_slack_bot()
 
-    asyncio.run(_start_event_watcher())
-
+    # The event watcher is started inside the app lifespan so it runs on
+    # uvicorn's event loop (a separate asyncio.run() would close its loop
+    # and kill the watcher before the server starts).
     from kubedevaiops.inputs.api import create_app
-    uvicorn.run(create_app(), host=h, port=p, log_level="info")
+    uvicorn.run(create_app(with_event_watcher=True), host=h, port=p, log_level="info")
 
 
 @cli.command()
 def operator():
     """Run only the Kopf operator."""
     import kopf
+
     import kubedevaiops.operator.handlers  # noqa: F401 — registers Kopf decorators
 
     kopf.run(clusterwide=True)
@@ -118,20 +120,12 @@ def mcp_server(transport: str, host: str, port: int):
 
 def _start_operator_thread() -> threading.Thread:
     import kopf
+
     import kubedevaiops.operator.handlers  # noqa: F401 — registers Kopf decorators
 
     t = threading.Thread(target=lambda: kopf.run(clusterwide=True), daemon=True, name="kopf")
     t.start()
     return t
-
-
-async def _start_event_watcher() -> None:
-    try:
-        from kubedevaiops.inputs.k8s_events import K8sEventWatcher
-        watcher = K8sEventWatcher()
-        await watcher.start()
-    except Exception:
-        structlog.get_logger().warning("k8s_event_watcher.skipped")
 
 
 if __name__ == "__main__":

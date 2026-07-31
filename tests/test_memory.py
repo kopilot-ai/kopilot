@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-import builtins
-
-import pytest
-
 from kubedevaiops.agent.memory import (
-    TaskContext,
     IncidentMemory,
+    TaskContext,
     get_checkpointer,
     reset_checkpointer,
 )

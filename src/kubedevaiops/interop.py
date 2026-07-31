@@ -7,7 +7,7 @@ from typing import Any
 from kubedevaiops.config import get_settings
 from kubedevaiops.skills.loader import SkillDefinition, discover_skills
 
-PRODUCT_VERSION = "0.1.0"
+PRODUCT_VERSION = "0.2.0"
 PUBLIC_REPO_URL = "https://github.com/kopilot-ai/kopilot"
 PUBLIC_SITE_URL = "https://kopilot-ai.github.io"
 

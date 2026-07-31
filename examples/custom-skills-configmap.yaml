@@ -1,0 +1,22 @@
+# Create the ConfigMap from the skill file, then install the chart with
+#   --set customSkillsConfigMap=kopilot-custom-skills
+#
+#   kubectl create configmap kopilot-custom-skills \
+#     --from-file=skills/deployment-runbook.yaml -n kubedevaiops
+#
+# The chart mounts it at /etc/kubedevaiops/skills and sets SKILL_DIRS.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kopilot-custom-skills
+  namespace: kubedevaiops
+data:
+  deployment-runbook.yaml: |
+    name: deployment_runbook
+    display_name: Deployment Runbook
+    description: Follows this organisation's deployment runbook for web services
+    system_prompt: |
+      You are the deployment runbook operator for this organisation.
+      Investigate deployment health first, then recommend actions.
+    documentation: |
+      Rollout status: kubectl rollout status deployment/<name> -n <ns>

@@ -1,6 +1,6 @@
-.PHONY: help install dev lint test run build push deploy local-k8s clean
+.PHONY: help install dev lint format helm-lint test run run-operator build build-podman push deploy undeploy deploy-crds local-k8s clean
 
-IMAGE   ?= kubedevaiops/kubedevaiops
+IMAGE   ?= ghcr.io/kopilot-ai/kopilot
 TAG     ?= latest
 K8S_NS  ?= kubedevaiops
 HELM    ?= helm
@@ -22,6 +22,10 @@ lint: ## Run linter
 format: ## Auto-format code
 	ruff check --fix src/ tests/
 	ruff format src/ tests/
+
+helm-lint: ## Lint the Helm chart
+	$(HELM) lint helm/kubedevaiops
+	$(HELM) template test helm/kubedevaiops > /dev/null
 
 test: ## Run tests
 	pytest tests/ -v --cov=src/kubedevaiops --cov-report=term-missing

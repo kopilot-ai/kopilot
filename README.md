@@ -12,9 +12,8 @@ over-provisioned workloads, idle resources, and orphaned storage from one
 prompt, explains the evidence in plain English, and recommends the next safe
 action.
 
-> Public CLI note: install the Python package as `kubedevaiops`, then run the
-> branded `kopilot` command. Internal package paths and Kubernetes API groups
-> still use `kubedevaiops` during the transition.
+> Naming note: the Python package and Kubernetes API group are `kubedevaiops`;
+> the CLI is available as both `kopilot` and `kubedevaiops`.
 
 **Built for**
 - Platform and DevOps teams managing noisy multi-namespace clusters
@@ -26,7 +25,8 @@ action.
 ## 30-Second Demo
 
 ```bash
-pip install kubedevaiops
+git clone https://github.com/kopilot-ai/kopilot && cd kopilot
+pip install -e .
 kopilot ask "Find over-provisioned deployments and orphaned PVCs across all namespaces"
 ```
 
@@ -40,13 +40,23 @@ What the first run should give you:
 
 - **Read-first by default**: investigations start with `get`, `describe`,
   `logs`, and metrics collection before any mutation is considered.
-- **Approval-gated changes**: destructive actions such as deletes, drains, and
-  cordons require explicit approval.
-- **Protected namespaces**: high-risk namespaces are blocked from destructive
-  actions.
-- **Audit trail**: every delegated task and executed command is recorded.
+- **Approval-gated changes**: destructive actions (deletes, drains, cordons,
+  taints, patches, scales, `helm uninstall`/`rollback`) are never executed
+  directly. The executor registers a pending approval request; a human reviews
+  it via `GET /approvals` and decides with
+  `POST /approvals/{id}/approve` or `/deny`. Approvals are single-use and
+  expire after 10 minutes.
+- **Protected namespaces**: destructive actions on `kube-system`,
+  `kube-public`, and `kube-node-lease` (configurable) are refused outright and
+  cannot be approved.
+- **API authentication**: bearer-token auth (`API_AUTH_TOKEN`) on task,
+  history, metrics, and approval endpoints; HMAC-signed webhooks
+  (`API_WEBHOOK_SECRET`).
+- **Audit trail**: every delegated task, executed command, and approval
+  decision is recorded as structured audit events.
 - **Self-hosted posture**: the core deployment model assumes you control the
-  cluster access path.
+  cluster access path — and the RBAC of the service account remains the
+  authoritative boundary; the safety layer is defense in depth on top of it.
 
 ![Kopilot architecture overview](docs/assets/kopilot-architecture.svg)
 
@@ -103,7 +113,7 @@ Agent-to-agent note:
 3. **Dynamic skill loading** — Skills are loaded from:
    - Built-in YAML files shipped with the package
    - Extra directories (e.g. ConfigMap volumes in K8s)
-   - AISkill CRDs applied to the cluster
+   - AISkill CRDs applied to the cluster (planned)
 
 4. **Supervisor pattern** — A coordinator agent routes user requests to the
    best sub-agent(s), allowing multi-domain tasks via parallel delegation.
@@ -186,13 +196,21 @@ Set `SKILL_DIRS=/path/to/extra/skills` or mount a ConfigMap.
 ## Safety & Guardrails
 
 - **Protected namespaces**: `kube-system`, `kube-public`, `kube-node-lease`
-  — all destructive operations blocked.
-- **Approval gates**: Delete, drain, cordon operations require explicit
-  approval before execution.
-- **Risk assessment**: Every command is classified (LOW / MEDIUM / HIGH / CRITICAL)
-  before execution.
-- **Audit trail**: Structured logs of every command, delegation, and result.
-- **Blocked patterns**: `rm -rf /`, `dd`, `mkfs` and similar are hard-blocked.
+  — all destructive operations blocked, including via `--namespace=`, glued
+  flags, chained commands, or the namespace as the resource itself.
+- **Approval workflow**: delete, drain, cordon, taint, patch, scale, replace,
+  `--prune`, and helm uninstall/rollback operations create a pending approval
+  request instead of running. Obfuscated invocations (`$(...)`, backticks,
+  `eval`, `xargs kubectl`) are also gated.
+- **Risk assessment**: every command is classified (LOW / MEDIUM / HIGH /
+  CRITICAL) before execution, and each task reports the highest risk seen.
+- **Rate limiting**: 50 tool calls per 5 minutes per task.
+- **Execution hygiene**: 90s subprocess timeouts with process-group kill,
+  2 MB output caps, no automatic retry of mutating commands.
+- **Audit trail**: structured logs of every command, delegation, approval
+  decision, and result.
+- **Blocked patterns**: `rm -rf /`, `dd of=/dev/*`, `mkfs`, fork bombs,
+  `shutdown`/`reboot` and similar are hard-blocked with no approval path.
 
 ## Quick Start
 
@@ -263,9 +281,16 @@ All settings via environment variables or `.env` file:
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama API endpoint |
 | `GEMINI_API_KEY` | (empty) | Google Gemini API key |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model name |
+| `ANTHROPIC_API_KEY` | (empty) | Anthropic API key |
+| `ANTHROPIC_MODEL` | `claude-opus-5` | Anthropic model name |
+| `API_AUTH_TOKEN` | (empty) | Bearer token for `/tasks`, `/tasks/history`, `/metrics`, `/approvals` |
+| `API_WEBHOOK_SECRET` | (empty) | HMAC secret for `/webhook` (disabled when unset) |
+| `API_CORS_ORIGINS` | `[]` | CORS origin allowlist (empty = disabled) |
 | `SAFETY_PROTECTED_NAMESPACES` | `kube-system,...` | JSON list |
-| `SAFETY_REQUIRE_APPROVAL_DESTRUCTIVE` | `true` | Gate destructive ops |
+| `SAFETY_REQUIRE_APPROVAL_DESTRUCTIVE` | `true` | Gate destructive ops behind human approval |
 | `SAFETY_MAX_CONCURRENT_TASKS` | `5` | Concurrent task limit |
+| `SAFETY_READ_PATHS` | `["/etc/kubedevaiops"]` | Directories `read_resource` may read |
+| `SLACK_ALLOWED_USERS` | `[]` | Slack user IDs allowed to run tasks |
 | `ENABLED_SKILLS` | all 6 built-ins | JSON list of skill names |
 | `SKILL_DIRS` | (empty) | Extra dirs (`;`-separated on Windows, `:`-separated on Linux) |
 | `LOG_FORMAT` | `json` | `json` or `console` |
@@ -302,15 +327,21 @@ spec:
 
 ## API Reference
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check with skills count and LLM provider |
-| `/readyz` | GET | Readiness probe |
-| `/skills` | GET | List loaded skills |
-| `/tasks` | POST | Submit a task (accepts `prompt`, `reflect`, `namespace`) |
-| `/tasks/history` | GET | Recent task history (configurable `?limit=`) |
-| `/webhook` | POST | Webhook handler for external integrations |
-| `/metrics` | GET | Prometheus-compatible metrics |
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/health` | GET | open | Health check with skills count and LLM provider |
+| `/readyz` | GET | open | Readiness probe |
+| `/skills` | GET | open | List loaded skills |
+| `/tasks` | POST | bearer | Submit a task (accepts `prompt`, `reflect`, `namespace`) |
+| `/tasks/history` | GET | bearer | Recent task history (configurable `?limit=`) |
+| `/approvals` | GET | bearer | List approval requests (`?status=pending`) |
+| `/approvals/{id}/approve` | POST | bearer | Approve a gated command (single-use, 10 min TTL) |
+| `/approvals/{id}/deny` | POST | bearer | Deny a gated command |
+| `/webhook` | POST | HMAC | Webhook handler (X-Kopilot-Signature, sha256) |
+| `/metrics` | GET | bearer | Prometheus-compatible metrics |
+
+Bearer auth is enforced when `API_AUTH_TOKEN` is set; without it the server
+runs open (development mode) and logs a warning.
 
 ## Development
 
@@ -394,7 +425,7 @@ tests/
 | Cloud LLM | Gemini | Good tool-calling, fast, cost-effective |
 | Safety | Pre-flight checks | Every command assessed before execution |
 | Observability | structlog + Prometheus | Structured JSON logs + metrics endpoint |
-| Testing | pytest + pytest-asyncio | Async-first, 75+ tests, 67% coverage |
+| Testing | pytest + pytest-asyncio | Async-first, 130+ unit tests incl. adversarial safety cases |
 
 ## License
 

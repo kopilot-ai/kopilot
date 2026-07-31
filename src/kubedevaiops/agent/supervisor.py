@@ -18,15 +18,15 @@ import uuid
 from typing import Any
 
 import structlog
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain.agents import create_agent
-from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
+from langchain_core.messages import AIMessage, HumanMessage
 
 from kubedevaiops.agent.llm import get_chat_model
 from kubedevaiops.agent.memory import TaskContext, get_checkpointer
 from kubedevaiops.executor.middleware import EXECUTOR_TOOLS
 from kubedevaiops.outputs.audit import log_event
 from kubedevaiops.skills.base import get_registry
+from kubedevaiops.taskscope import begin_task, max_recorded_risk
 
 logger = structlog.get_logger(__name__)
 
@@ -108,7 +108,7 @@ def _make_subagent_tools():
             msgs = result.get("messages", [])
             for msg in reversed(msgs):
                 if isinstance(msg, AIMessage) and msg.content:
-                    return msg.content
+                    return _content_to_text(msg.content)
             return "(sub-agent returned no response)"
 
         tools.append(
@@ -162,6 +162,21 @@ def reset_supervisor() -> None:
     _compiled_supervisor = None
 
 
+def _content_to_text(content: Any) -> str:
+    """Normalise LangChain message content (str or block list) to plain text."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and block.get("type") in (None, "text"):
+                parts.append(str(block.get("text", "")))
+        return "".join(parts)
+    return str(content)
+
+
 async def _reflect(prompt: str, response: str) -> dict[str, Any]:
     """Run a lightweight reflection on the agent's response."""
     llm = get_chat_model()
@@ -170,7 +185,7 @@ async def _reflect(prompt: str, response: str) -> dict[str, Any]:
     )
     try:
         result = await llm.ainvoke([HumanMessage(content=reflection_input)])
-        content = result.content if hasattr(result, "content") else str(result)
+        content = _content_to_text(result.content) if hasattr(result, "content") else str(result)
         needs_improvement = content.strip().startswith("NEEDS_IMPROVEMENT:")
         return {
             "score": "needs_improvement" if needs_improvement else "satisfactory",
@@ -197,10 +212,10 @@ async def run_task(
     }
 
     log_event("task.start", task_id=task_id, prompt=prompt[:200])
+    begin_task(task_id)
     start = time.monotonic()
 
     answer = ""
-    risk_level = "low"
     reflection = None
     attempts = 0
 
@@ -221,7 +236,6 @@ async def run_task(
                     "complex shell escaping. Please rephrase or break the request "
                     "into smaller steps."
                 )
-                risk_level = "low"
                 break
 
             if attempt < max_retries:
@@ -232,7 +246,7 @@ async def run_task(
         msgs = result.get("messages", [])
         for msg in reversed(msgs):
             if isinstance(msg, AIMessage) and msg.content:
-                answer = msg.content
+                answer = _content_to_text(msg.content)
                 break
 
         if reflect and answer:
@@ -253,7 +267,9 @@ async def run_task(
     result_dict: dict[str, Any] = {
         "task_id": task_id,
         "answer": answer,
-        "risk_level": risk_level,
+        # Highest risk level the safety layer saw for any command this task
+        # attempted (recorded via taskscope, whether executed or gated).
+        "risk_level": max_recorded_risk(),
         "elapsed_ms": elapsed_ms,
         "attempts": attempts,
     }

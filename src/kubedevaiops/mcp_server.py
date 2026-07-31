@@ -6,8 +6,8 @@ import json
 import uuid
 from typing import Literal
 
-from mcp.server.fastmcp import FastMCP  # type: ignore[import-not-found]  # pylint: disable=import-error,no-name-in-module
-from mcp.server.fastmcp.exceptions import ToolError  # type: ignore[import-not-found]  # pylint: disable=import-error,no-name-in-module
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from kubedevaiops.agent.memory import TaskContext
 from kubedevaiops.agent.supervisor import run_task
@@ -19,9 +19,9 @@ from kubedevaiops.interop import (
 )
 
 
-def create_mcp_server(host: str = "127.0.0.1", port: int = 8000) -> FastMCP:
-    """Create a FastMCP server exposing Kopilot task and skill surfaces."""
-    mcp = FastMCP(
+def create_mcp_server() -> MCPServer:
+    """Create an MCP server exposing Kopilot task and skill surfaces."""
+    mcp = MCPServer(
         name="Kopilot",
         instructions=(
             "Use Kopilot to inspect Kubernetes environments with "
@@ -29,8 +29,6 @@ def create_mcp_server(host: str = "127.0.0.1", port: int = 8000) -> FastMCP:
             "skill discovery, then run tasks."
         ),
         website_url=PUBLIC_REPO_URL,
-        host=host,
-        port=port,
     )
 
     @mcp.tool()
@@ -76,7 +74,7 @@ def create_mcp_server(host: str = "127.0.0.1", port: int = 8000) -> FastMCP:
         """Expose a single portable skill manifest as a resource."""
         manifest = get_portable_skill_manifest(name)
         if manifest is None:
-            raise ValueError(f"Unknown skill '{name}'")
+            raise ToolError(f"Unknown skill '{name}'")
         return json.dumps(manifest, indent=2)
 
     return mcp
@@ -88,4 +86,8 @@ def serve_mcp(
     port: int = 8000,
 ) -> None:
     """Run the Kopilot MCP server."""
-    create_mcp_server(host=host, port=port).run(transport=transport)
+    server = create_mcp_server()
+    if transport == "stdio":
+        server.run(transport="stdio")
+    else:
+        server.run(transport=transport, host=host, port=port)
