@@ -1,0 +1,9 @@
+# Read-only investigation: safe to run on any cluster Kopilot can read.
+apiVersion: kubedevaiops.io/v1alpha1
+kind: AITask
+metadata:
+  name: health-check
+  namespace: kubedevaiops
+spec:
+  prompt: "Perform a full cluster health check: node conditions, pending pods, recent Warning events. Report findings only."
+  priority: normal

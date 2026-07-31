@@ -1,0 +1,11 @@
+# High-priority incident investigation scoped to one namespace.
+apiVersion: kubedevaiops.io/v1alpha1
+kind: AITask
+metadata:
+  name: checkout-crashloop
+  namespace: kubedevaiops
+spec:
+  prompt: "Pods in namespace 'checkout' are crash-looping. Find the root cause from pod status, events, and logs, and recommend a fix."
+  priority: high
+  namespace: checkout
+  skills: [troubleshooting]

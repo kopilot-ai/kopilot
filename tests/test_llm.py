@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -19,9 +19,8 @@ def test_ollama_provider_returns_chat_model():
 
 def test_gemini_provider_creates_model(monkeypatch):
     """Test Gemini factory path by mocking the settings to return Gemini provider."""
-    from kubedevaiops.config import LLMSettings, GeminiSettings
+    from kubedevaiops.config import GeminiSettings
 
-    mock_gemini = GeminiSettings()
     mock_gemini_with_key = MagicMock(spec=GeminiSettings)
     mock_gemini_with_key.api_key = "test-key"
     mock_gemini_with_key.model = "gemini-2.5-flash"
@@ -48,9 +47,11 @@ def test_unsupported_provider_raises():
     mock_settings.llm.model = "test"
 
     reset_chat_model()
-    with patch("kubedevaiops.agent.llm.get_settings", return_value=mock_settings):
-        with pytest.raises(ValueError, match="Unsupported LLM provider"):
-            get_chat_model()
+    with (
+        patch("kubedevaiops.agent.llm.get_settings", return_value=mock_settings),
+        pytest.raises(ValueError, match="Unsupported LLM provider"),
+    ):
+        get_chat_model()
 
 
 def test_cached_model_returns_same_instance():
@@ -66,3 +67,20 @@ def test_reset_clears_cache():
     reset_chat_model()
     model2 = get_chat_model()
     assert model1 is not model2
+
+
+def test_anthropic_provider_creates_model():
+    """Test the Anthropic factory path with mocked settings."""
+    mock_settings = MagicMock()
+    mock_settings.llm.provider = LLMProvider.ANTHROPIC
+    mock_settings.llm.model = "claude-opus-5"
+    mock_settings.llm.max_tokens = 4096
+    mock_settings.llm.request_timeout = 120
+    mock_settings.anthropic.model = "claude-opus-5"
+    mock_settings.anthropic.api_key = "test-key"
+
+    reset_chat_model()
+    with patch("kubedevaiops.agent.llm.get_settings", return_value=mock_settings):
+        model = get_chat_model()
+    assert model is not None
+    assert "Anthropic" in type(model).__name__

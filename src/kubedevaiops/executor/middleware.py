@@ -2,58 +2,77 @@
 
 Provides a small set of *generic* tools that any sub-agent can use to interact
 with a Kubernetes cluster. The LLM decides what commands to run; the middleware
-enforces safety, rate-limiting, and audit logging.
+enforces safety, rate-limiting, approval gating, and audit logging.
 """
 
 from __future__ import annotations
 
 import asyncio
+import os
 import re
+import signal
+import threading
 import time
 from collections import defaultdict
-from typing import Any
 
 import structlog
 from langchain_core.tools import tool
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-from kubedevaiops.agent.safety import RiskLevel, SafetyVerdict, assess_command
+from kubedevaiops.agent.safety import RiskLevel, SafetyVerdict, assess_command, is_mutating
+from kubedevaiops.config import get_settings
+from kubedevaiops.executor.approvals import get_approval_store
 from kubedevaiops.outputs.audit import log_event
+from kubedevaiops.taskscope import current_task_id, record_risk
 
 logger = structlog.get_logger(__name__)
 
 MAX_OUTPUT = 12_000
+# Hard cap on bytes read from a subprocess before it is killed. Prevents a
+# chatty `kubectl logs` from buffering gigabytes in memory.
+MAX_CAPTURE_BYTES = 2_000_000
 DEFAULT_TIMEOUT = 90
 
 _BLOCKED_PATTERNS = re.compile(
-    r"rm\s+-rf\s+/|"
-    r":(){ :|:& };:|"
+    r"rm\s+(?:-[a-z-]+\s+)*(?:-[a-z]*[rf][a-z]*\s+)+(?:--no-preserve-root\s+)?/(?:\s|$|\*)|"
+    r":\(\)\s*\{.*\};\s*:|"
     r"mkfs\.|"
-    r"dd\s+if=.*/dev/",
+    r"\bdd\s+[^|;&]*of=/dev/|"
+    r"\bshutdown\b|\breboot\b|\bhalt\b|"
+    r"\bchmod\s+(?:-[rR]+\s+)?000\s+/|"
+    r"\bfind\s+/\s+.*-delete",
     re.IGNORECASE,
 )
 
+_NAME_PAT = re.compile(r"^[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$")
+_URL_PAT = re.compile(r"^https?://[^\s\"'<>\\]+$")
+
 
 class ToolRateLimiter:
-    """Token-bucket rate limiter for tool calls per thread/task."""
+    """Sliding-window rate limiter for tool calls per thread/task."""
 
     def __init__(self, max_calls: int = 50, window_seconds: float = 300.0):
         self._max_calls = max_calls
         self._window = window_seconds
         self._calls: dict[str, list[float]] = defaultdict(list)
+        self._lock = threading.Lock()
 
     def check(self, thread_id: str = "global") -> bool:
         now = time.monotonic()
-        self._calls[thread_id] = [
-            t for t in self._calls[thread_id] if now - t < self._window
-        ]
-        if len(self._calls[thread_id]) >= self._max_calls:
-            return False
-        self._calls[thread_id].append(now)
-        return True
+        with self._lock:
+            bucket = [t for t in self._calls[thread_id] if now - t < self._window]
+            if len(bucket) >= self._max_calls:
+                self._calls[thread_id] = bucket
+                return False
+            bucket.append(now)
+            self._calls[thread_id] = bucket
+            # Evict stale buckets so long-running processes don't leak memory.
+            for key in [k for k, v in self._calls.items() if not v and k != thread_id]:
+                del self._calls[key]
+            return True
 
     def reset(self, thread_id: str = "global") -> None:
-        self._calls.pop(thread_id, None)
+        with self._lock:
+            self._calls.pop(thread_id, None)
 
 
 _rate_limiter = ToolRateLimiter(max_calls=50, window_seconds=300.0)
@@ -69,39 +88,102 @@ class CommandTimeoutError(Exception):
     pass
 
 
-@retry(
-    stop=stop_after_attempt(2),
-    wait=wait_exponential(multiplier=1, min=2, max=10),
-    retry=retry_if_exception_type(CommandTimeoutError),
-    reraise=True,
-)
-async def _exec(cmd: str, timeout: int = DEFAULT_TIMEOUT) -> str:
-    """Execute a shell command with timeout, retry on transient failures."""
-    _execution_stats["total_commands"] += 1
-    proc = await asyncio.create_subprocess_shell(
-        cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
+async def _read_capped(stream: asyncio.StreamReader | None, cap: int) -> tuple[bytes, bool]:
+    """Read a stream up to ``cap`` bytes. Returns (data, truncated)."""
+    if stream is None:
+        return b"", False
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await stream.read(65536)
+        if not chunk:
+            return b"".join(chunks), False
+        total += len(chunk)
+        if total > cap:
+            chunks.append(chunk[: cap - (total - len(chunk))])
+            return b"".join(chunks), True
+        chunks.append(chunk)
+
+
+def _kill_process_group(proc: asyncio.subprocess.Process) -> None:
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        proc.kill()
+
+
+async def _run_once(cmd: str | list[str], timeout: int) -> tuple[int | None, str]:
+    """Run a command (shell string or argv list) with timeout and output cap."""
+    if isinstance(cmd, str):
+        proc = await asyncio.create_subprocess_shell(
+            cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,
+        )
+    else:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,
+        )
+
+    read_task = asyncio.gather(
+        _read_capped(proc.stdout, MAX_CAPTURE_BYTES),
+        _read_capped(proc.stderr, MAX_CAPTURE_BYTES),
     )
     try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except asyncio.TimeoutError:
-        proc.kill()
-        _execution_stats["timeouts"] += 1
-        raise CommandTimeoutError(f"Command timed out after {timeout}s: {cmd[:100]}")
+        (out, out_trunc), (err, err_trunc) = await asyncio.wait_for(read_task, timeout=timeout)
+    except TimeoutError:
+        read_task.cancel()
+        _kill_process_group(proc)
+        await proc.wait()
+        raise
+    truncated = out_trunc or err_trunc
+    if truncated:
+        _kill_process_group(proc)
+    await proc.wait()
 
-    out = (stdout or b"").decode(errors="replace")
-    err = (stderr or b"").decode(errors="replace")
-    combined = (out + err).strip()
-
-    if proc.returncode != 0:
-        _execution_stats["errors"] += 1
-    else:
-        _execution_stats["successes"] += 1
-
+    combined = (out.decode(errors="replace") + err.decode(errors="replace")).strip()
+    if truncated:
+        combined += "\n...(output limit reached; process terminated)"
     if len(combined) > MAX_OUTPUT:
         combined = combined[:MAX_OUTPUT] + "\n...(truncated)"
-    return combined
+    return proc.returncode, combined
+
+
+async def _exec(cmd: str | list[str], timeout: int = DEFAULT_TIMEOUT) -> str:
+    """Execute a command with timeout and output caps.
+
+    Read-only commands are retried once on timeout; mutating commands are
+    never retried automatically (a timed-out `kubectl apply` may have taken
+    effect on the server).
+    """
+    display = cmd if isinstance(cmd, str) else " ".join(cmd)
+    retryable = isinstance(cmd, list) or not is_mutating(cmd)
+    attempts = 2 if retryable else 1
+
+    for attempt in range(attempts):
+        _execution_stats["total_commands"] += 1
+        try:
+            returncode, combined = await _run_once(cmd, timeout)
+        except TimeoutError:
+            _execution_stats["timeouts"] += 1
+            if attempt < attempts - 1:
+                await asyncio.sleep(2)
+                continue
+            raise CommandTimeoutError(
+                f"Command timed out after {timeout}s: {display[:100]}"
+            ) from None
+
+        if returncode != 0:
+            _execution_stats["errors"] += 1
+        else:
+            _execution_stats["successes"] += 1
+        return combined
+
+    raise CommandTimeoutError(f"Command timed out after {timeout}s: {display[:100]}")
 
 
 def _pre_flight(command: str) -> SafetyVerdict:
@@ -114,7 +196,7 @@ def _pre_flight(command: str) -> SafetyVerdict:
             reason="Command matches a blocked destructive pattern.",
         )
 
-    if not _rate_limiter.check():
+    if not _rate_limiter.check(current_task_id()):
         _execution_stats["rate_limited"] += 1
         return SafetyVerdict(
             allowed=False,
@@ -122,7 +204,50 @@ def _pre_flight(command: str) -> SafetyVerdict:
             reason="Tool call rate limit exceeded. Wait before retrying.",
         )
 
-    return assess_command(command)
+    verdict = assess_command(command)
+    record_risk(verdict.risk.value)
+    return verdict
+
+
+async def _guarded_run(command: str, tool_name: str) -> str:
+    """Common safety pipeline + execution for the kubectl/helm/shell tools."""
+    verdict = _pre_flight(command)
+
+    if verdict.requires_approval:
+        store = get_approval_store()
+        approved = store.consume_if_approved(command)
+        if approved is not None:
+            log_event(
+                f"executor.{tool_name}.approved",
+                command=command[:200],
+                approval_id=approved.id,
+            )
+            try:
+                return await _exec(command)
+            except CommandTimeoutError as e:
+                return f"ERROR: {e}"
+
+        req = store.request(
+            command=command, tool=tool_name, reason=verdict.reason, risk=verdict.risk.value
+        )
+        log_event("executor.approval_required", command=command[:200], approval_id=req.id)
+        return (
+            f"APPROVAL REQUIRED ({verdict.risk.value}): {verdict.reason} "
+            f"A pending approval request was created with id '{req.id}'. "
+            f"A human operator must approve it (POST /approvals/{req.id}/approve) "
+            f"before this exact command can be executed. Do not attempt to work "
+            f"around this gate; report the approval id to the user instead."
+        )
+
+    if not verdict.allowed:
+        log_event("executor.blocked", command=command[:200], reason=verdict.reason)
+        return f"BLOCKED ({verdict.risk.value}): {verdict.reason}"
+
+    log_event(f"executor.{tool_name}", command=command[:200])
+    try:
+        return await _exec(command)
+    except CommandTimeoutError as e:
+        return f"ERROR: {e}"
 
 
 @tool
@@ -134,24 +259,12 @@ async def run_kubectl(command: str) -> str:
       run_kubectl("kubectl describe node worker-1")
       run_kubectl("kubectl apply -f - <<EOF\\napiVersion: v1\\n...")
 
-    Destructive operations on protected namespaces will be blocked.
+    Destructive operations on protected namespaces are blocked; other
+    destructive operations require human approval before they run.
     """
     if not command.strip().startswith("kubectl"):
         command = f"kubectl {command}"
-
-    verdict = _pre_flight(command)
-    if not verdict.allowed:
-        log_event("executor.blocked", command=command[:200], reason=verdict.reason)
-        return f"BLOCKED ({verdict.risk.value}): {verdict.reason}"
-    if verdict.requires_approval:
-        log_event("executor.approval_required", command=command[:200])
-        return f"APPROVAL REQUIRED ({verdict.risk.value}): {verdict.reason}"
-
-    log_event("executor.kubectl", command=command[:200])
-    try:
-        return await _exec(command)
-    except CommandTimeoutError as e:
-        return f"ERROR: {e}"
+    return await _guarded_run(command, "kubectl")
 
 
 @tool
@@ -163,24 +276,11 @@ async def run_helm(command: str) -> str:
       run_helm("helm install my-release bitnami/nginx -n web --create-namespace")
       run_helm("helm upgrade my-release ./chart --set replicas=3 --dry-run")
 
-    Uninstall operations are subject to safety checks.
+    Uninstall and rollback operations require human approval.
     """
     if not command.strip().startswith("helm"):
         command = f"helm {command}"
-
-    verdict = _pre_flight(command)
-    if not verdict.allowed:
-        log_event("executor.blocked", command=command[:200], reason=verdict.reason)
-        return f"BLOCKED ({verdict.risk.value}): {verdict.reason}"
-    if verdict.requires_approval:
-        log_event("executor.approval_required", command=command[:200])
-        return f"APPROVAL REQUIRED ({verdict.risk.value}): {verdict.reason}"
-
-    log_event("executor.helm", command=command[:200])
-    try:
-        return await _exec(command)
-    except CommandTimeoutError as e:
-        return f"ERROR: {e}"
+    return await _guarded_run(command, "helm")
 
 
 @tool
@@ -194,50 +294,61 @@ async def run_shell(command: str) -> str:
 
     Dangerous commands (rm -rf /, dd, mkfs) are blocked.
     """
-    verdict = _pre_flight(command)
-    if not verdict.allowed:
-        log_event("executor.blocked", command=command[:200], reason=verdict.reason)
-        return f"BLOCKED ({verdict.risk.value}): {verdict.reason}"
-
-    log_event("executor.shell", command=command[:200])
-    try:
-        return await _exec(command)
-    except CommandTimeoutError as e:
-        return f"ERROR: {e}"
+    return await _guarded_run(command, "shell")
 
 
 @tool
 async def read_resource(path_or_url: str) -> str:
-    """Read a documentation file, URL, or Kubernetes resource manifest.
+    """Read a documentation file, URL, or Kubernetes ConfigMap.
 
     Examples:
       read_resource("/etc/kubedevaiops/docs/security-playbook.md")
       read_resource("configmap:my-config:default")  # reads a ConfigMap
 
     For ConfigMaps, use the format: configmap:<name>:<namespace>
+    File reads are restricted to the configured documentation directories.
     """
+    if not _rate_limiter.check(current_task_id()):
+        _execution_stats["rate_limited"] += 1
+        return "BLOCKED (medium): Tool call rate limit exceeded. Wait before retrying."
+
     if path_or_url.startswith("configmap:"):
         parts = path_or_url.split(":")
         name = parts[1] if len(parts) > 1 else ""
-        ns = parts[2] if len(parts) > 2 else "default"
+        ns = parts[2] if len(parts) > 2 and parts[2] else "default"
+        if not _NAME_PAT.match(name) or not _NAME_PAT.match(ns):
+            return f"BLOCKED: invalid ConfigMap reference '{path_or_url[:120]}'."
+        log_event("executor.read_configmap", name=name, namespace=ns)
         try:
-            return await _exec(f"kubectl get configmap {name} -n {ns} -o yaml")
+            return await _exec(["kubectl", "get", "configmap", name, "-n", ns, "-o", "yaml"])
         except CommandTimeoutError as e:
             return f"ERROR: {e}"
 
     if path_or_url.startswith(("http://", "https://")):
+        if not _URL_PAT.match(path_or_url):
+            return f"BLOCKED: malformed URL '{path_or_url[:120]}'."
+        log_event("executor.read_url", url=path_or_url[:200])
         try:
-            return await _exec(f"curl -sL --max-time 15 \"{path_or_url}\"")
+            return await _exec(["curl", "-sL", "--max-time", "15", "--", path_or_url])
         except CommandTimeoutError as e:
             return f"ERROR: {e}"
 
+    import pathlib
+
+    allowed_roots = [
+        pathlib.Path(root).resolve()
+        for root in get_settings().safety.read_paths
+        if root.strip()
+    ]
     try:
-        import pathlib
-        p = pathlib.Path(path_or_url)
+        p = pathlib.Path(path_or_url).resolve()
+        if not any(p.is_relative_to(root) for root in allowed_roots):
+            allowed = ", ".join(str(r) for r in allowed_roots) or "(no configured directories)"
+            return f"BLOCKED: file reads are restricted to {allowed}."
         if p.exists() and p.is_file():
-            text = p.read_text(encoding="utf-8", errors="replace")
-            return text[:MAX_OUTPUT]
-    except Exception:
+            log_event("executor.read_file", path=str(p))
+            return p.read_text(encoding="utf-8", errors="replace")[:MAX_OUTPUT]
+    except OSError:
         pass
 
     return f"Could not read resource: {path_or_url}"

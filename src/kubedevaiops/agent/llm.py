@@ -6,7 +6,6 @@ supporting Ollama (local), OpenAI, Azure OpenAI, Anthropic, and Gemini.
 
 from __future__ import annotations
 
-from functools import lru_cache
 from typing import TYPE_CHECKING
 
 import structlog
@@ -70,11 +69,11 @@ def get_chat_model() -> BaseChatModel:
             )
 
         case LLMProvider.ANTHROPIC:
-            from langchain_community.chat_models import ChatAnthropic
+            from langchain_anthropic import ChatAnthropic
 
             _chat_model = ChatAnthropic(
-                model=llm_cfg.model,
-                temperature=llm_cfg.temperature,
+                model=cfg.anthropic.model or llm_cfg.model,
+                api_key=cfg.anthropic.api_key or None,
                 max_tokens=llm_cfg.max_tokens,
                 timeout=llm_cfg.request_timeout,
             )

@@ -3,16 +3,21 @@
 Watches Warning events across all namespaces. When a specific resource+reason
 combination exceeds the threshold within the time window, triggers an automated
 investigation through the supervisor agent.
+
+The kubernetes client's watch stream is synchronous, so it runs in a worker
+thread and feeds an asyncio queue; the async side consumes events without
+blocking the event loop.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import threading
 import time
 from collections import defaultdict
 
 import structlog
-from tenacity import retry, stop_after_attempt, wait_exponential
 
 from kubedevaiops.outputs.audit import log_event
 
@@ -23,6 +28,7 @@ WINDOW_SECONDS = 300
 MAX_CONCURRENT_INVESTIGATIONS = 3
 BACKOFF_BASE = 5
 BACKOFF_MAX = 60
+QUEUE_MAX = 1000
 
 
 class K8sEventWatcher:
@@ -33,24 +39,33 @@ class K8sEventWatcher:
         self._running = False
         self._threshold = threshold
         self._window = window
-        self._active_investigations = 0
-        self._task: asyncio.Task | None = None
+        self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_INVESTIGATIONS)
+        self._queue: asyncio.Queue = asyncio.Queue(maxsize=QUEUE_MAX)
+        self._consumer_task: asyncio.Task | None = None
+        self._watch_thread: threading.Thread | None = None
+        # Strong references to in-flight investigation tasks (asyncio only
+        # keeps weak references, so unreferenced tasks can be GC'd mid-run).
+        self._investigations: set[asyncio.Task] = set()
 
     async def start(self) -> None:
         self._running = True
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._load_config)
-        self._task = asyncio.create_task(self._watch_loop())
+        self._watch_thread = threading.Thread(
+            target=self._watch_blocking, args=(loop,), daemon=True, name="k8s-event-watch"
+        )
+        self._watch_thread.start()
+        self._consumer_task = asyncio.create_task(self._consume_loop())
         logger.info("k8s_events.watcher.started", threshold=self._threshold, window=self._window)
 
     async def stop(self) -> None:
         self._running = False
-        if self._task and not self._task.done():
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
+        if self._consumer_task and not self._consumer_task.done():
+            self._consumer_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._consumer_task
+        for task in list(self._investigations):
+            task.cancel()
         logger.info("k8s_events.watcher.stopped")
 
     @staticmethod
@@ -64,7 +79,8 @@ class K8sEventWatcher:
             except Exception:
                 logger.warning("k8s_events.no_config")
 
-    async def _watch_loop(self) -> None:
+    def _watch_blocking(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Runs in a worker thread: stream events into the asyncio queue."""
         from kubernetes import client, watch
 
         backoff = BACKOFF_BASE
@@ -76,13 +92,30 @@ class K8sEventWatcher:
                 for event in w.stream(v1.list_event_for_all_namespaces, timeout_seconds=60):
                     if not self._running:
                         return
-                    await self._process(event)
-            except asyncio.CancelledError:
-                return
+                    try:
+                        loop.call_soon_threadsafe(self._enqueue, event)
+                    except RuntimeError:
+                        # Event loop closed; shut the thread down.
+                        return
             except Exception:
                 logger.exception("k8s_events.watch_error", backoff=backoff)
-                await asyncio.sleep(backoff)
+                time.sleep(backoff)
                 backoff = min(backoff * 2, BACKOFF_MAX)
+
+    def _enqueue(self, event: dict) -> None:
+        """Runs on the event loop thread; drops events when the queue is full."""
+        try:
+            self._queue.put_nowait(event)
+        except asyncio.QueueFull:
+            logger.warning("k8s_events.queue_full")
+
+    async def _consume_loop(self) -> None:
+        while self._running:
+            event = await self._queue.get()
+            try:
+                await self._process(event)
+            except Exception:
+                logger.exception("k8s_events.process_error")
 
     async def _process(self, event: dict) -> None:
         obj = event.get("object")
@@ -109,33 +142,33 @@ class K8sEventWatcher:
         if len(self._counts[key]) >= self._threshold:
             logger.warning("k8s_events.threshold", key=key, count=len(self._counts[key]))
             log_event("k8s_events.auto_trigger", key=key)
-            if self._active_investigations < MAX_CONCURRENT_INVESTIGATIONS:
-                asyncio.create_task(self._investigate(key, obj))
-            else:
+            if self._semaphore.locked():
                 logger.warning("k8s_events.investigation_throttled", key=key)
+            else:
+                task = asyncio.create_task(self._investigate(key, obj))
+                self._investigations.add(task)
+                task.add_done_callback(self._investigations.discard)
             self._counts[key].clear()
 
     async def _investigate(self, key: str, event_obj) -> None:
-        from kubedevaiops.agent.supervisor import run_task
         from kubedevaiops.agent.memory import TaskContext
+        from kubedevaiops.agent.supervisor import run_task
 
-        self._active_investigations += 1
-        try:
-            involved = getattr(event_obj, "involved_object", None)
-            ns = getattr(involved, "namespace", None) or "default" if involved else "default"
-            name = getattr(involved, "name", "unknown") if involved else "unknown"
-            reason = getattr(event_obj, "reason", "Unknown")
-            message = getattr(event_obj, "message", "No message")
+        async with self._semaphore:
+            try:
+                involved = getattr(event_obj, "involved_object", None)
+                ns = (getattr(involved, "namespace", None) or "default") if involved else "default"
+                name = getattr(involved, "name", "unknown") if involved else "unknown"
+                reason = getattr(event_obj, "reason", "Unknown")
+                message = getattr(event_obj, "message", "No message")
 
-            prompt = (
-                f"Automatic investigation: repeated Warning event on {ns}/{name}.\n"
-                f"Reason: {reason}\nMessage: {message}\n\n"
-                f"Diagnose the root cause and recommend remediation."
-            )
+                prompt = (
+                    f"Automatic investigation: repeated Warning event on {ns}/{name}.\n"
+                    f"Reason: {reason}\nMessage: {message}\n\n"
+                    f"Diagnose the root cause and recommend remediation."
+                )
 
-            ctx = TaskContext(task_id=f"auto-{key}", channel="k8s-event", namespace=ns)
-            await run_task(prompt, context=ctx)
-        except Exception:
-            logger.exception("k8s_events.auto_failed", key=key)
-        finally:
-            self._active_investigations -= 1
+                ctx = TaskContext(task_id=f"auto-{key}", channel="k8s-event", namespace=ns)
+                await run_task(prompt, context=ctx)
+            except Exception:
+                logger.exception("k8s_events.auto_failed", key=key)

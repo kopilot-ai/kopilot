@@ -1,8 +1,7 @@
 """Tests for configuration."""
 
-import pytest
 
-from kubedevaiops.config import LLMProvider, GeminiSettings, get_settings
+from kubedevaiops.config import GeminiSettings, LLMProvider, get_settings
 
 
 def test_defaults():

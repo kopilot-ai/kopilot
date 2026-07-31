@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from langchain_core.messages import AIMessage
 
-from kubedevaiops.agent.supervisor import run_task, reset_supervisor, _reflect
 from kubedevaiops.agent.memory import TaskContext
+from kubedevaiops.agent.supervisor import _reflect, reset_supervisor, run_task
 
 
 @pytest.fixture(autouse=True)

@@ -7,7 +7,6 @@ by default in CI. Run explicitly to validate a real setup.
 
 from __future__ import annotations
 
-import asyncio
 import os
 import subprocess
 
@@ -61,8 +60,9 @@ class TestOllamaSmoke:
         import kubedevaiops.config as cfg_mod
         cfg_mod._settings = None
 
-        from kubedevaiops.agent.llm import get_chat_model, reset_chat_model
         from langchain_core.messages import HumanMessage
+
+        from kubedevaiops.agent.llm import get_chat_model, reset_chat_model
 
         reset_chat_model()
         model = get_chat_model()
@@ -97,8 +97,9 @@ class TestGeminiSmoke:
         import kubedevaiops.config as cfg_mod
         cfg_mod._settings = None
 
-        from kubedevaiops.agent.llm import get_chat_model, reset_chat_model
         from langchain_core.messages import HumanMessage
+
+        from kubedevaiops.agent.llm import get_chat_model, reset_chat_model
 
         reset_chat_model()
         model = get_chat_model()
@@ -163,7 +164,7 @@ class TestEndToEnd:
 
         from kubedevaiops.agent.llm import reset_chat_model
         from kubedevaiops.agent.memory import reset_checkpointer
-        from kubedevaiops.agent.supervisor import run_task, reset_supervisor
+        from kubedevaiops.agent.supervisor import reset_supervisor, run_task
 
         reset_chat_model()
         reset_checkpointer()

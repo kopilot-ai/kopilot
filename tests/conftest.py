@@ -26,16 +26,16 @@ def _set_test_env(monkeypatch):
     import kubedevaiops.agent.memory as mem_mod
     mem_mod._checkpointer = None
 
+    import kubedevaiops.executor.approvals as approvals_mod
+    approvals_mod._store = None
+
 
 @pytest.fixture
 def mock_subprocess(monkeypatch):
-    import asyncio
-    from unittest.mock import AsyncMock, MagicMock
+    """Stub out subprocess execution in the executor middleware."""
+    from kubedevaiops.executor import middleware
 
-    async def _fake(*args, **kwargs):
-        proc = MagicMock()
-        proc.communicate = AsyncMock(return_value=(b"mocked output", b""))
-        proc.kill = MagicMock()
-        return proc
+    async def _fake_run_once(cmd, timeout):
+        return 0, "mocked output"
 
-    monkeypatch.setattr(asyncio, "create_subprocess_shell", _fake)
+    monkeypatch.setattr(middleware, "_run_once", _fake_run_once)

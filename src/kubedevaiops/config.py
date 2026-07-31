@@ -6,14 +6,13 @@ so the agent works out-of-the-box with a local Ollama instance.
 
 from __future__ import annotations
 
-from enum import Enum
-from typing import ClassVar
+from enum import StrEnum
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class LLMProvider(str, Enum):
+class LLMProvider(StrEnum):
     OLLAMA = "ollama"
     OPENAI = "openai"
     AZURE_OPENAI = "azure_openai"
@@ -22,7 +21,7 @@ class LLMProvider(str, Enum):
 
 
 class LLMSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="LLM_")
+    model_config = SettingsConfigDict(env_prefix="LLM_", extra="ignore")
 
     provider: LLMProvider = LLMProvider.OLLAMA
     model: str = "gpt-oss:20b"
@@ -32,20 +31,20 @@ class LLMSettings(BaseSettings):
 
 
 class OllamaSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="OLLAMA_")
+    model_config = SettingsConfigDict(env_prefix="OLLAMA_", extra="ignore")
 
     base_url: str = "http://localhost:11434"
 
 
 class OpenAISettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="OPENAI_")
+    model_config = SettingsConfigDict(env_prefix="OPENAI_", extra="ignore")
 
     api_key: str = ""
     model: str = "gpt-4o"
 
 
 class AzureOpenAISettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="AZURE_OPENAI_")
+    model_config = SettingsConfigDict(env_prefix="AZURE_OPENAI_", extra="ignore")
 
     endpoint: str = ""
     api_key: str = ""
@@ -53,39 +52,57 @@ class AzureOpenAISettings(BaseSettings):
     api_version: str = "2024-08-01-preview"
 
 
+class AnthropicSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="ANTHROPIC_", extra="ignore")
+
+    api_key: str = ""
+    model: str = "claude-opus-5"
+
+
 class GeminiSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="GEMINI_")
+    model_config = SettingsConfigDict(env_prefix="GEMINI_", extra="ignore")
 
     api_key: str = ""
     model: str = "gemini-2.5-flash"
 
 
 class K8sSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="K8S_")
+    model_config = SettingsConfigDict(env_prefix="K8S_", extra="ignore")
 
     kubeconfig: str = Field(default="", alias="KUBECONFIG")
     namespace: str = "kubedevaiops"
 
 
 class APISettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="API_")
+    model_config = SettingsConfigDict(env_prefix="API_", extra="ignore")
 
     host: str = "0.0.0.0"
     port: int = 8080
-    cors_origins: list[str] = ["*"]
+    # Empty list disables CORS entirely (same-origin only).  Set an explicit
+    # allowlist for browser clients; "*" is intentionally not the default.
+    cors_origins: list[str] = []
+    # Bearer token required on task-submitting and history endpoints when set.
+    # Leave empty only for local development; the server logs a warning.
+    auth_token: str = ""
+    # Shared secret for HMAC-SHA256 webhook signature verification
+    # (X-Kopilot-Signature header). Webhooks are rejected when unset.
+    webhook_secret: str = ""
 
 
 class SlackSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="SLACK_")
+    model_config = SettingsConfigDict(env_prefix="SLACK_", extra="ignore")
 
     bot_token: str = ""
     app_token: str = ""
     signing_secret: str = ""
     enabled: bool = False
+    # Slack user IDs allowed to run tasks. Empty list = allow all workspace
+    # members (not recommended outside sandboxes).
+    allowed_users: list[str] = []
 
 
 class SafetySettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="SAFETY_")
+    model_config = SettingsConfigDict(env_prefix="SAFETY_", extra="ignore")
 
     dry_run_default: bool = False
     require_approval_destructive: bool = True
@@ -95,10 +112,13 @@ class SafetySettings(BaseSettings):
         "kube-public",
         "kube-node-lease",
     ]
+    # Directories read_resource() may read files from. Empty = file reads
+    # disabled (ConfigMap and URL reads are unaffected).
+    read_paths: list[str] = ["/etc/kubedevaiops"]
 
 
 class ObservabilitySettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="")
+    model_config = SettingsConfigDict(env_prefix="", extra="ignore")
 
     log_level: str = "INFO"
     log_format: str = "json"
@@ -115,16 +135,17 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    llm: ClassVar[LLMSettings] = LLMSettings()
-    ollama: ClassVar[OllamaSettings] = OllamaSettings()
-    openai: ClassVar[OpenAISettings] = OpenAISettings()
-    azure_openai: ClassVar[AzureOpenAISettings] = AzureOpenAISettings()
-    gemini: ClassVar[GeminiSettings] = GeminiSettings()
-    k8s: ClassVar[K8sSettings] = K8sSettings()
-    api: ClassVar[APISettings] = APISettings()
-    slack: ClassVar[SlackSettings] = SlackSettings()
-    safety: ClassVar[SafetySettings] = SafetySettings()
-    observability: ClassVar[ObservabilitySettings] = ObservabilitySettings()
+    llm: LLMSettings = Field(default_factory=LLMSettings)
+    ollama: OllamaSettings = Field(default_factory=OllamaSettings)
+    openai: OpenAISettings = Field(default_factory=OpenAISettings)
+    azure_openai: AzureOpenAISettings = Field(default_factory=AzureOpenAISettings)
+    anthropic: AnthropicSettings = Field(default_factory=AnthropicSettings)
+    gemini: GeminiSettings = Field(default_factory=GeminiSettings)
+    k8s: K8sSettings = Field(default_factory=K8sSettings)
+    api: APISettings = Field(default_factory=APISettings)
+    slack: SlackSettings = Field(default_factory=SlackSettings)
+    safety: SafetySettings = Field(default_factory=SafetySettings)
+    observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
 
     enabled_skills: list[str] = [
         "security",
@@ -144,3 +165,9 @@ def get_settings() -> Settings:
     if _settings is None:
         _settings = Settings()
     return _settings
+
+
+def reset_settings() -> None:
+    """Clear the cached settings (used in tests)."""
+    global _settings  # noqa: PLW0603
+    _settings = None

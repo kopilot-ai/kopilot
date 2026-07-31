@@ -6,7 +6,8 @@ import sys
 
 
 def setup_gemini():
-    os.environ["GEMINI_API_KEY"] = "A....g"
+    if not os.environ.get("GEMINI_API_KEY"):
+        sys.exit("Set GEMINI_API_KEY in the environment before running the Gemini smoke test.")
     os.environ["LLM_PROVIDER"] = "gemini"
     os.environ["GEMINI_MODEL"] = "gemini-2.5-flash"
     os.environ["LLM_MODEL"] = "gemini-2.5-flash"
