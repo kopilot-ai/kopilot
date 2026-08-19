@@ -6,18 +6,21 @@ reviews the queue (``GET /approvals``) and approves or denies each request.
 An approved command is executed the next time the agent retries it, within
 the approval TTL, after which the approval is consumed.
 
-The store is in-memory and process-local: approvals do not survive a restart
-and are scoped to a single replica.  Every transition is written to the audit
-log.
+The store is process-local and scoped to a single replica.  With a
+``db_path`` (``APPROVALS_DB_PATH``) every transition is journaled to SQLite
+and reloaded on startup, so approvals survive a restart; without one the
+store is memory-only.  Every transition is written to the audit log.
 """
 
 from __future__ import annotations
 
+import sqlite3
 import threading
 import time
 import uuid
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 
 import structlog
 
@@ -65,12 +68,84 @@ class ApprovalRequest:
 
 
 class ApprovalStore:
-    """Thread-safe in-memory approval queue."""
+    """Thread-safe approval queue; optionally journaled to SQLite."""
 
-    def __init__(self, ttl: float = APPROVAL_TTL_SECONDS):
+    def __init__(self, ttl: float = APPROVAL_TTL_SECONDS, db_path: str | None = None):
         self._ttl = ttl
         self._requests: dict[str, ApprovalRequest] = {}
         self._lock = threading.Lock()
+        self._db: sqlite3.Connection | None = None
+        if db_path:
+            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+            self._db = sqlite3.connect(db_path, check_same_thread=False)
+            self._db.execute("PRAGMA journal_mode=WAL")
+            self._db.execute(
+                """CREATE TABLE IF NOT EXISTS approvals (
+                    id TEXT PRIMARY KEY,
+                    command TEXT NOT NULL,
+                    tool TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    risk TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    decided_at REAL,
+                    decided_by TEXT NOT NULL DEFAULT ''
+                )"""
+            )
+            self._db.commit()
+            with self._lock:
+                self._load_locked()
+                self._expire_locked()
+
+    def _load_locked(self) -> None:
+        assert self._db is not None
+        rows = self._db.execute(
+            "SELECT id, command, tool, reason, risk, status, created_at, decided_at,"
+            " decided_by FROM approvals"
+        ).fetchall()
+        for row in rows:
+            req = ApprovalRequest(
+                command=row[1],
+                tool=row[2],
+                reason=row[3],
+                risk=row[4],
+                id=row[0],
+                status=ApprovalStatus(row[5]),
+                created_at=row[6],
+                decided_at=row[7],
+                decided_by=row[8],
+            )
+            self._requests[req.id] = req
+        if rows:
+            logger.info("approvals.reloaded", count=len(rows))
+
+    def _persist_locked(self, req: ApprovalRequest) -> None:
+        if self._db is None:
+            return
+        self._db.execute(
+            "INSERT INTO approvals (id, command, tool, reason, risk, status, created_at,"
+            " decided_at, decided_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            " ON CONFLICT(id) DO UPDATE SET status=excluded.status,"
+            " decided_at=excluded.decided_at, decided_by=excluded.decided_by",
+            (
+                req.id,
+                req.command,
+                req.tool,
+                req.reason,
+                req.risk,
+                req.status.value,
+                req.created_at,
+                req.decided_at,
+                req.decided_by,
+            ),
+        )
+        self._db.commit()
+
+    def _delete_persisted_locked(self, approval_id: str) -> None:
+        if self._db is None:
+            return
+        self._db.execute("DELETE FROM approvals WHERE id = ?", (approval_id,))
+        self._db.commit()
 
     def _expire_locked(self) -> None:
         now = time.time()
@@ -82,6 +157,7 @@ class ApprovalStore:
             and now - (r.decided_at or r.created_at) > self._ttl * 4
         ]:
             del self._requests[key]
+            self._delete_persisted_locked(key)
         for req in self._requests.values():
             expired_pending = (
                 req.status is ApprovalStatus.PENDING and now - req.created_at > self._ttl
@@ -93,6 +169,7 @@ class ApprovalStore:
             )
             if expired_pending or expired_approval:
                 req.status = ApprovalStatus.EXPIRED
+                self._persist_locked(req)
 
     def request(self, command: str, tool: str, reason: str, risk: str) -> ApprovalRequest:
         """Register (or return the existing) pending request for a command."""
@@ -109,9 +186,11 @@ class ApprovalStore:
             if len(pending) >= MAX_PENDING:
                 oldest = min(pending, key=lambda r: r.created_at)
                 oldest.status = ApprovalStatus.EXPIRED
+                self._persist_locked(oldest)
 
             req = ApprovalRequest(command=command, tool=tool, reason=reason, risk=risk)
             self._requests[req.id] = req
+            self._persist_locked(req)
             log_event("approval.requested", approval_id=req.id, command=command[:200], risk=risk)
             return req
 
@@ -139,6 +218,7 @@ class ApprovalStore:
             req.status = status
             req.decided_at = time.time()
             req.decided_by = decided_by
+            self._persist_locked(req)
             return req
 
     def approve(self, approval_id: str, decided_by: str = "api") -> ApprovalRequest | None:
@@ -161,6 +241,7 @@ class ApprovalStore:
             for req in self._requests.values():
                 if req.status is ApprovalStatus.APPROVED and _normalize(req.command) == normalized:
                     req.status = ApprovalStatus.CONSUMED
+                    self._persist_locked(req)
                     log_event(
                         "approval.consumed",
                         approval_id=req.id,
@@ -177,7 +258,9 @@ _store: ApprovalStore | None = None
 def get_approval_store() -> ApprovalStore:
     global _store  # noqa: PLW0603
     if _store is None:
-        _store = ApprovalStore()
+        from kubedevaiops.config import get_settings
+
+        _store = ApprovalStore(db_path=get_settings().approvals.db_path or None)
     return _store
 
 
