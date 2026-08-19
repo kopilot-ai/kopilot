@@ -108,13 +108,19 @@ class SafetySettings(BaseSettings):
     read_paths: list[str] = ["/etc/kubedevaiops"]
 
 
+class ApprovalSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="APPROVALS_", extra="ignore")
+
+    # SQLite file backing the approval queue. Empty = memory-only (approvals
+    # do not survive a restart). The Helm chart sets /data/approvals.db.
+    db_path: str = ""
+
+
 class ObservabilitySettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="", extra="ignore")
 
     log_level: str = "INFO"
     log_format: str = "json"
-    metrics_enabled: bool = True
-    metrics_port: int = 9090
 
 
 class Settings(BaseSettings):
@@ -135,6 +141,7 @@ class Settings(BaseSettings):
     api: APISettings = Field(default_factory=APISettings)
     slack: SlackSettings = Field(default_factory=SlackSettings)
     safety: SafetySettings = Field(default_factory=SafetySettings)
+    approvals: ApprovalSettings = Field(default_factory=ApprovalSettings)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
 
     enabled_skills: list[str] = [
