@@ -140,7 +140,8 @@ async def test_aiskill_create():
         patch=patch_obj,
         status={},
     )
-    assert patch_obj.status["phase"] == "Loaded"
+    # enabled but without a systemPrompt: nothing can be loaded
+    assert patch_obj.status["phase"] == "Invalid"
 
 
 @pytest.mark.asyncio
@@ -169,3 +170,108 @@ async def test_aipolicy_create():
         status={},
     )
     assert patch_obj.status["phase"] == "Active"
+
+
+# ── AISkill live registration ────────────────────────────────────────────────
+
+
+def _skill_spec(**overrides):
+    spec = {
+        "enabled": True,
+        "displayName": "FinOps Extras",
+        "description": "Org-specific cost checks",
+        "category": "finops",
+        "systemPrompt": "You are the org FinOps reviewer.",
+        "documentation": "Check quota annotations.",
+    }
+    spec.update(overrides)
+    return spec
+
+
+@pytest.mark.asyncio
+async def test_aiskill_create_registers_skill():
+    from unittest.mock import MagicMock
+
+    from kubedevaiops.operator.handlers import on_aiskill_create
+
+    registry = MagicMock()
+    patch_obj = MockPatch()
+    with patch("kubedevaiops.skills.base.get_registry", return_value=registry):
+        await on_aiskill_create(
+            spec=_skill_spec(), name="finops-extras", patch=patch_obj, status={}
+        )
+
+    assert patch_obj.status["phase"] == "Loaded"
+    registry.register.assert_called_once()
+    defn = registry.register.call_args.args[0]
+    assert defn.name == "finops-extras"
+    assert defn.system_prompt == "You are the org FinOps reviewer."
+    assert defn.source == "crd:finops-extras"
+
+
+@pytest.mark.asyncio
+async def test_aiskill_create_without_prompt_is_invalid():
+    from unittest.mock import MagicMock
+
+    from kubedevaiops.operator.handlers import on_aiskill_create
+
+    registry = MagicMock()
+    patch_obj = MockPatch()
+    with patch("kubedevaiops.skills.base.get_registry", return_value=registry):
+        await on_aiskill_create(
+            spec=_skill_spec(systemPrompt=""), name="broken", patch=patch_obj, status={}
+        )
+
+    assert patch_obj.status["phase"] == "Invalid"
+    registry.register.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_aiskill_disabled_unregisters():
+    from unittest.mock import MagicMock
+
+    from kubedevaiops.operator.handlers import on_aiskill_create, on_aiskill_update
+
+    registry = MagicMock()
+    patch_obj = MockPatch()
+    with patch("kubedevaiops.skills.base.get_registry", return_value=registry):
+        await on_aiskill_create(
+            spec=_skill_spec(enabled=False), name="off-skill", patch=patch_obj, status={}
+        )
+        assert patch_obj.status["phase"] == "Disabled"
+        registry.unregister.assert_called_with("off-skill")
+
+        patch_obj2 = MockPatch()
+        await on_aiskill_update(
+            spec=_skill_spec(enabled=False), name="off-skill", patch=patch_obj2, status={}
+        )
+        assert patch_obj2.status["phase"] == "Disabled"
+
+
+@pytest.mark.asyncio
+async def test_aiskill_delete_unregisters():
+    from unittest.mock import MagicMock
+
+    from kubedevaiops.operator.handlers import on_aiskill_delete
+
+    registry = MagicMock()
+    with patch("kubedevaiops.skills.base.get_registry", return_value=registry):
+        await on_aiskill_delete(name="finops-extras")
+    registry.unregister.assert_called_with("finops-extras")
+
+
+@pytest.mark.asyncio
+async def test_aiskill_register_failure_sets_failed():
+    from unittest.mock import MagicMock
+
+    from kubedevaiops.operator.handlers import on_aiskill_create
+
+    registry = MagicMock()
+    registry.register.side_effect = RuntimeError("no LLM configured")
+    patch_obj = MockPatch()
+    with patch("kubedevaiops.skills.base.get_registry", return_value=registry):
+        await on_aiskill_create(
+            spec=_skill_spec(), name="finops-extras", patch=patch_obj, status={}
+        )
+
+    assert patch_obj.status["phase"] == "Failed"

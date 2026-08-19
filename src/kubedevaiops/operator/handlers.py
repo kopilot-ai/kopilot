@@ -155,36 +155,94 @@ async def on_aitask_delete(name, **_):
 # ── AISkill ─────────────────────────────────────────────────────────────────
 
 
+def _apply_aiskill(spec, name, patch, status) -> None:
+    """Reconcile an AISkill spec into the process-local skill registry.
+
+    Effective in ``kopilot serve``, where the operator thread shares the
+    process with the API and supervisor. A standalone ``kopilot operator``
+    updates status only; the serve replica loads the skill.
+    """
+    from kubedevaiops.skills.base import get_registry
+    from kubedevaiops.skills.loader import SkillDefinition
+
+    enabled = spec.get("enabled", True)
+    existing = (status or {}).get("conditions")
+
+    if not enabled:
+        get_registry().unregister(name)
+        patch.status["phase"] = "Disabled"
+        _set_condition(
+            patch, "Ready", "False", "Disabled",
+            f"Skill '{name}' is disabled",
+            existing_conditions=existing,
+        )
+        log_event("operator.aiskill.disabled", name=name)
+        return
+
+    system_prompt = (spec.get("systemPrompt") or "").strip()
+    if not system_prompt:
+        patch.status["phase"] = "Invalid"
+        _set_condition(
+            patch, "Ready", "False", "Invalid",
+            "spec.systemPrompt is required to load a skill",
+            existing_conditions=existing,
+        )
+        log_event("operator.aiskill.invalid", name=name)
+        return
+
+    defn = SkillDefinition(
+        name=name,
+        display_name=spec.get("displayName", name),
+        description=spec.get("description", ""),
+        category=spec.get("category", "custom"),
+        system_prompt=system_prompt,
+        documentation=spec.get("documentation", ""),
+        source=f"crd:{name}",
+    )
+    try:
+        get_registry().register(defn)
+    except Exception as exc:
+        logger.exception("operator.aiskill.load_failed", skill=name)
+        patch.status["phase"] = "Failed"
+        _set_condition(
+            patch, "Ready", "False", "LoadFailed",
+            f"Skill '{name}' failed to load: {exc}",
+            existing_conditions=existing,
+        )
+        log_event("operator.aiskill.load_failed", name=name, error=str(exc))
+        return
+
+    patch.status["phase"] = "Loaded"
+    patch.status["loaded"] = True
+    _set_condition(
+        patch, "Ready", "True", "Loaded",
+        f"Skill '{name}' loaded into the registry",
+        existing_conditions=existing,
+    )
+    log_event("operator.aiskill.loaded", name=name, enabled=True)
+
+
 @kopf.on.create(GROUP, VERSION, "aiskills")
 async def on_aiskill_create(spec, name, patch, status, **_):
     """Register a skill from a CRD resource."""
-    enabled = spec.get("enabled", True)
-    logger.info("operator.aiskill.created", skill=name, enabled=enabled)
-
-    patch.status["phase"] = "Loaded" if enabled else "Disabled"
-    _set_condition(
-        patch, "Ready",
-        "True" if enabled else "False",
-        "Loaded" if enabled else "Disabled",
-        f"Skill '{name}' {'loaded' if enabled else 'disabled'}",
-        existing_conditions=(status or {}).get("conditions"),
-    )
-    log_event("operator.aiskill.loaded", name=name, enabled=enabled)
+    logger.info("operator.aiskill.created", skill=name)
+    _apply_aiskill(spec, name, patch, status)
 
 
 @kopf.on.update(GROUP, VERSION, "aiskills", field="spec")
 async def on_aiskill_update(spec, name, patch, status, **_):
-    """Handle skill spec updates (enable/disable toggle)."""
-    enabled = spec.get("enabled", True)
-    logger.info("operator.aiskill.updated", skill=name, enabled=enabled)
-    patch.status["phase"] = "Loaded" if enabled else "Disabled"
-    _set_condition(
-        patch, "Ready",
-        "True" if enabled else "False",
-        "Updated",
-        f"Skill '{name}' {'enabled' if enabled else 'disabled'}",
-        existing_conditions=(status or {}).get("conditions"),
-    )
+    """Handle skill spec updates (content changes and enable/disable)."""
+    logger.info("operator.aiskill.updated", skill=name)
+    _apply_aiskill(spec, name, patch, status)
+
+
+@kopf.on.delete(GROUP, VERSION, "aiskills")
+async def on_aiskill_delete(name, **_):
+    """Remove a deleted CRD skill from the registry."""
+    from kubedevaiops.skills.base import get_registry
+
+    get_registry().unregister(name)
+    log_event("operator.aiskill.deleted", name=name)
 
 
 # ── AIPolicy ────────────────────────────────────────────────────────────────

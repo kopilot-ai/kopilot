@@ -26,10 +26,18 @@ spec:
                 enabled:
                   type: boolean
                   default: true
+                displayName:
+                  type: string
                 description:
                   type: string
                 category:
                   type: string
+                systemPrompt:
+                  type: string
+                  description: Domain system prompt; required to load the skill
+                documentation:
+                  type: string
+                  description: Inline reference documentation for the sub-agent
                 config:
                   type: object
                   x-kubernetes-preserve-unknown-fields: true

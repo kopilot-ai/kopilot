@@ -28,6 +28,21 @@ class SkillRegistry:
                 documentation=defn.documentation,
             )
 
+    def register(self, defn: SkillDefinition) -> None:
+        """Add or replace a skill at runtime (AISkill CRDs in serve mode)."""
+        self._definitions[defn.name] = defn
+        self._agents[defn.name] = build_subagent(
+            name=defn.name,
+            system_prompt=defn.system_prompt,
+            documentation=defn.documentation,
+        )
+        logger.info("skill.registered", name=defn.name, source=defn.source)
+
+    def unregister(self, name: str) -> None:
+        if self._definitions.pop(name, None) is not None:
+            self._agents.pop(name, None)
+            logger.info("skill.unregistered", name=name)
+
     def get_agent(self, name: str):
         return self._agents.get(name)
 
