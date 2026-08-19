@@ -7,6 +7,24 @@ release companion for future tags and GitHub releases.
 
 ## [Unreleased]
 
+### Added
+
+- **Durable approvals**: `APPROVALS_DB_PATH` journals every approval
+  transition to SQLite and reloads state on startup, so pending approvals
+  survive a restart. Unset keeps the previous memory-only behavior. The Helm
+  chart sets `/data/approvals.db` on an emptyDir by default;
+  `persistence.enabled=true` provisions a PVC that survives rescheduling.
+- **AISkill CRDs load for real**: in `kopilot serve`, applying an AISkill
+  (new additive spec fields `displayName`, `systemPrompt`, `documentation`)
+  registers a live sub-agent in the skill registry; disabling or deleting the
+  resource unregisters it. A skill without `systemPrompt` reports `Invalid`
+  instead of pretending to load. Standalone `kopilot operator` still only
+  updates status — the serve replica owns the registry.
+- **Helm chart published as an OCI artifact**: version tags push the chart to
+  `oci://ghcr.io/kopilot-ai/charts/kubedevaiops`, so clients install without
+  cloning the repo. Container images gain semver tags (`0.3.0`, `0.3`)
+  and the chart's default image tag follows its appVersion.
+
 ### Security
 
 - **Shell denylist bypass closed**: the root-deletion guard only fired when the
@@ -44,6 +62,8 @@ release companion for future tags and GitHub releases.
 
 - README: Helm example used a value key that does not exist
   (`llm.ollamaUrl` → `ollama.baseUrl`); interop endpoints added to the API table
+- `metrics_enabled`/`metrics_port` settings actually removed from the config
+  model (a previous entry claimed the removal)
 
 ## [0.2.0] - 2026-07-31
 
