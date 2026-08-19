@@ -5,7 +5,8 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/kopilot-ai/kopilot
-  tag: latest
+  # Defaults to the chart's appVersion when empty.
+  tag: ""
   pullPolicy: IfNotPresent
 
 serviceAccount:
@@ -84,6 +85,16 @@ enabledSkills: '["security","administration","networking","monitoring","troubles
 # Custom skills: name of a ConfigMap whose keys are *.yaml skill definitions.
 # It is mounted at /etc/kubedevaiops/skills and SKILL_DIRS is set accordingly.
 customSkillsConfigMap: ""
+
+# Approval queue durability. The store is written to /data/approvals.db so
+# pending approvals survive container restarts. By default /data is an
+# emptyDir (survives container restarts, not pod deletion); enable
+# persistence for a PVC that survives pod rescheduling.
+persistence:
+  enabled: false
+  size: 1Gi
+  storageClass: ""
+  accessModes: ["ReadWriteOnce"]
 
 # Observability
 # Prometheus metrics are served on the API port at /metrics (bearer-protected

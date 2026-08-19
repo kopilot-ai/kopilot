@@ -32,5 +32,6 @@ data:
   {{- if ne .Values.slack.allowedUsers "[]" }}
   SLACK_ALLOWED_USERS: {{ .Values.slack.allowedUsers | quote }}
   {{- end }}
+  APPROVALS_DB_PATH: "/data/approvals.db"
   LOG_LEVEL: {{ .Values.observability.logLevel | quote }}
   LOG_FORMAT: {{ .Values.observability.logFormat | quote }}

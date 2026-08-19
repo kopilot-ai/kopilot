@@ -21,7 +21,7 @@ spec:
       {{- end }}
       containers:
         - name: agent
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- with .Values.containerSecurityContext }}
           securityContext:
@@ -42,12 +42,14 @@ spec:
                 name: {{ include "kubedevaiops.fullname" . }}-secrets
                 optional: true
             {{- end }}
-          {{- if .Values.customSkillsConfigMap }}
           volumeMounts:
+            - name: data
+              mountPath: /data
+            {{- if .Values.customSkillsConfigMap }}
             - name: custom-skills
               mountPath: /etc/kubedevaiops/skills
               readOnly: true
-          {{- end }}
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /health
@@ -62,12 +64,19 @@ spec:
             periodSeconds: 10
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-      {{- if .Values.customSkillsConfigMap }}
       volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "kubedevaiops.fullname" . }}-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- if .Values.customSkillsConfigMap }}
         - name: custom-skills
           configMap:
             name: {{ .Values.customSkillsConfigMap }}
-      {{- end }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
