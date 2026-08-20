@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kopilot.fullname" . }}
+  labels:
+    {{- include "kopilot.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "kopilot.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kopilot.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "kopilot.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: agent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "kopilot.fullname" . }}-config
+            {{- if .Values.existingSecret }}
+            - secretRef:
+                name: {{ .Values.existingSecret }}
+            {{- else }}
+            - secretRef:
+                name: {{ include "kopilot.fullname" . }}-secrets
+                optional: true
+            {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            {{- if .Values.customSkillsConfigMap }}
+            - name: custom-skills
+              mountPath: /etc/kopilot/skills
+              readOnly: true
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "kopilot.fullname" . }}-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- if .Values.customSkillsConfigMap }}
+        - name: custom-skills
+          configMap:
+            name: {{ .Values.customSkillsConfigMap }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

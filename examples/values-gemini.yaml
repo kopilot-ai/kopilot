@@ -1,4 +1,4 @@
-# helm install kopilot ./helm/kubedevaiops -f examples/values-gemini.yaml \
+# helm install kopilot ./helm/kopilot -f examples/values-gemini.yaml \
 #   --set gemini.apiKey=$GEMINI_API_KEY --set api.authToken=$KOPILOT_TOKEN
 llm:
   provider: gemini

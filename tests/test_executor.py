@@ -2,7 +2,7 @@
 
 import pytest
 
-from kubedevaiops.executor.middleware import run_helm, run_kubectl, run_shell
+from kopilot.executor.middleware import run_helm, run_kubectl, run_shell
 
 
 @pytest.mark.asyncio

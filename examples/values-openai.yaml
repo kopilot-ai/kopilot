@@ -1,4 +1,4 @@
-# helm install kopilot ./helm/kubedevaiops -f examples/values-openai.yaml \
+# helm install kopilot ./helm/kopilot -f examples/values-openai.yaml \
 #   --set openai.apiKey=$OPENAI_API_KEY --set api.authToken=$KOPILOT_TOKEN
 llm:
   provider: openai

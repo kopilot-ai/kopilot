@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from kubedevaiops.agent.safety import RiskLevel
-from kubedevaiops.executor.approvals import get_approval_store
-from kubedevaiops.executor.middleware import (
+from kopilot.agent.safety import RiskLevel
+from kopilot.executor.approvals import get_approval_store
+from kopilot.executor.middleware import (
     ToolRateLimiter,
     _pre_flight,
     get_execution_stats,
@@ -156,7 +156,7 @@ async def test_protected_namespace_blocked_at_executor(mock_subprocess):
 @pytest.mark.asyncio
 async def test_read_resource_file_within_allowed_root(tmp_path, monkeypatch):
     monkeypatch.setenv("SAFETY_READ_PATHS", f'["{tmp_path}"]')
-    import kubedevaiops.config as cfg_mod
+    import kopilot.config as cfg_mod
     cfg_mod._settings = None
 
     f = tmp_path / "test.txt"
@@ -168,7 +168,7 @@ async def test_read_resource_file_within_allowed_root(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_read_resource_outside_allowed_root_blocked(tmp_path, monkeypatch):
     monkeypatch.setenv("SAFETY_READ_PATHS", f'["{tmp_path}"]')
-    import kubedevaiops.config as cfg_mod
+    import kopilot.config as cfg_mod
     cfg_mod._settings = None
 
     result = await read_resource.ainvoke({"path_or_url": "/etc/passwd"})
@@ -178,7 +178,7 @@ async def test_read_resource_outside_allowed_root_blocked(tmp_path, monkeypatch)
 @pytest.mark.asyncio
 async def test_read_resource_missing(monkeypatch, tmp_path):
     monkeypatch.setenv("SAFETY_READ_PATHS", f'["{tmp_path}"]')
-    import kubedevaiops.config as cfg_mod
+    import kopilot.config as cfg_mod
     cfg_mod._settings = None
 
     result = await read_resource.ainvoke({"path_or_url": str(tmp_path / "nope.txt")})
@@ -208,7 +208,7 @@ def test_execution_stats():
 
 @pytest.mark.asyncio
 async def test_risk_level_recorded_for_task(mock_subprocess):
-    from kubedevaiops.taskscope import begin_task, max_recorded_risk
+    from kopilot.taskscope import begin_task, max_recorded_risk
 
     begin_task("risk-test")
     await run_kubectl.ainvoke({"command": "kubectl get pods"})

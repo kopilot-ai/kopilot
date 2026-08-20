@@ -1,0 +1,18 @@
+apiVersion: v2
+name: kopilot
+description: Kopilot - approval-gated AI Kubernetes operations agent
+type: application
+icon: https://kopilot-ai.github.io/assets/brand/kopilot-mark.svg
+version: 0.4.0
+appVersion: "0.4.0"
+keywords:
+  - kubernetes
+  - aiops
+  - devops
+  - langchain
+  - autonomous-agent
+maintainers:
+  - name: Riadh HAJ AMOR
+home: https://github.com/kopilot-ai/kopilot
+sources:
+  - https://github.com/kopilot-ai/kopilot

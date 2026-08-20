@@ -1,8 +1,8 @@
-apiVersion: kubedevaiops.io/v1alpha1
+apiVersion: kopilot-ai.github.io/v1alpha1
 kind: AIPolicy
 metadata:
   name: default-guardrails
-  namespace: kubedevaiops
+  namespace: kopilot
 spec:
   description: "Baseline guardrails for the Kopilot agent"
   rules:

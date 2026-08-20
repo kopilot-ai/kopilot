@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from mcp.server.mcpserver import MCPServer
 
-from kubedevaiops.interop import (  # type: ignore[import-untyped]
+from kopilot.interop import (  # type: ignore[import-untyped]
     get_agent_manifest,
     get_portable_skill_manifest,
     list_portable_skill_manifests,
 )
-from kubedevaiops.mcp_server import create_mcp_server  # type: ignore[import-untyped]
+from kopilot.mcp_server import create_mcp_server  # type: ignore[import-untyped]
 
 
 def test_portable_skill_manifest_includes_safety_and_distribution():

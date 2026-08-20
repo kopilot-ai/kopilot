@@ -20,11 +20,11 @@ def setup_ollama():
 
 
 def reset_all():
-    import kubedevaiops.config as c
+    import kopilot.config as c
     c._settings = None
-    from kubedevaiops.agent.llm import reset_chat_model
-    from kubedevaiops.agent.memory import reset_checkpointer
-    from kubedevaiops.agent.supervisor import reset_supervisor
+    from kopilot.agent.llm import reset_chat_model
+    from kopilot.agent.memory import reset_checkpointer
+    from kopilot.agent.supervisor import reset_supervisor
     reset_chat_model()
     reset_checkpointer()
     reset_supervisor()
@@ -41,7 +41,7 @@ async def run_test(provider: str, prompt: str):
 
     reset_all()
 
-    from kubedevaiops.agent.supervisor import run_task
+    from kopilot.agent.supervisor import run_task
 
     print(f"\n{'='*60}")
     print(f"Provider: {provider}")

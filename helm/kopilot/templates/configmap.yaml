@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "kopilot.fullname" . }}-config
+  labels:
+    {{- include "kopilot.labels" . | nindent 4 }}
+data:
+  LLM_PROVIDER: {{ .Values.llm.provider | quote }}
+  LLM_MODEL: {{ .Values.llm.model | quote }}
+  LLM_TEMPERATURE: {{ .Values.llm.temperature | quote }}
+  LLM_MAX_TOKENS: {{ .Values.llm.maxTokens | quote }}
+  LLM_REQUEST_TIMEOUT: {{ .Values.llm.requestTimeout | quote }}
+  OLLAMA_BASE_URL: {{ .Values.ollama.baseUrl | quote }}
+  OPENAI_MODEL: {{ .Values.openai.model | quote }}
+  GEMINI_MODEL: {{ .Values.gemini.model | quote }}
+  ANTHROPIC_MODEL: {{ .Values.anthropic.model | quote }}
+  {{- if .Values.azureOpenai.endpoint }}
+  AZURE_OPENAI_ENDPOINT: {{ .Values.azureOpenai.endpoint | quote }}
+  AZURE_OPENAI_DEPLOYMENT: {{ .Values.azureOpenai.deployment | quote }}
+  AZURE_OPENAI_API_VERSION: {{ .Values.azureOpenai.apiVersion | quote }}
+  {{- end }}
+  API_HOST: {{ .Values.api.host | quote }}
+  API_PORT: {{ .Values.api.port | quote }}
+  SAFETY_REQUIRE_APPROVAL_DESTRUCTIVE: {{ .Values.safety.requireApprovalDestructive | quote }}
+  SAFETY_MAX_CONCURRENT_TASKS: {{ .Values.safety.maxConcurrentTasks | quote }}
+  SAFETY_PROTECTED_NAMESPACES: {{ .Values.safety.protectedNamespaces | quote }}
+  SAFETY_READ_PATHS: {{ .Values.safety.readPaths | quote }}
+  ENABLED_SKILLS: {{ .Values.enabledSkills | quote }}
+  {{- if .Values.customSkillsConfigMap }}
+  SKILL_DIRS: "/etc/kopilot/skills"
+  {{- end }}
+  {{- if ne .Values.slack.allowedUsers "[]" }}
+  SLACK_ALLOWED_USERS: {{ .Values.slack.allowedUsers | quote }}
+  {{- end }}
+  APPROVALS_DB_PATH: "/data/approvals.db"
+  AUTONOMY_LEVEL: {{ .Values.autonomy.level | quote }}
+  {{- if ne .Values.autonomy.autopilotNamespaces "[]" }}
+  AUTONOMY_AUTOPILOT_NAMESPACES: {{ .Values.autonomy.autopilotNamespaces | quote }}
+  {{- end }}
+  LOG_LEVEL: {{ .Values.observability.logLevel | quote }}
+  LOG_FORMAT: {{ .Values.observability.logFormat | quote }}

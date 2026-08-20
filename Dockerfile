@@ -20,13 +20,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-get purge -y --auto-remove curl && \
     rm -rf /var/lib/apt/lists/* kubectl kubectl.sha256 helm-* "linux-${ARCH}"
 
-RUN groupadd -r -g 10001 kubedevaiops && \
-    useradd -r -u 10001 -g kubedevaiops -d /home/kubedevaiops -m kubedevaiops
+RUN groupadd -r -g 10001 kopilot && \
+    useradd -r -u 10001 -g kopilot -d /home/kopilot -m kopilot
 
 WORKDIR /app
 
 COPY pyproject.toml README.md ./
-COPY src/kubedevaiops/__init__.py src/kubedevaiops/__init__.py
+COPY src/kopilot/__init__.py src/kopilot/__init__.py
 RUN pip install --no-cache-dir .
 
 COPY src/ /app/src/
@@ -35,7 +35,7 @@ RUN pip install --no-cache-dir --no-deps .
 # Numeric UID so Kubernetes runAsNonRoot can verify the user
 USER 10001:10001
 ENV PYTHONUNBUFFERED=1 \
-    HOME=/home/kubedevaiops
+    HOME=/home/kopilot
 EXPOSE 8080
 
 LABEL org.opencontainers.image.title="Kopilot" \
@@ -46,5 +46,5 @@ LABEL org.opencontainers.image.title="Kopilot" \
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import httpx; r=httpx.get('http://localhost:8080/health'); assert r.status_code==200"
 
-ENTRYPOINT ["python", "-m", "kubedevaiops"]
+ENTRYPOINT ["python", "-m", "kopilot"]
 CMD ["serve"]

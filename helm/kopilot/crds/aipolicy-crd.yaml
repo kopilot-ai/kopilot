@@ -1,0 +1,88 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: aipolicies.kopilot-ai.github.io
+spec:
+  group: kopilot-ai.github.io
+  names:
+    kind: AIPolicy
+    listKind: AIPolicyList
+    plural: aipolicies
+    singular: aipolicy
+    shortNames: [aip]
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                autonomyLevel:
+                  type: integer
+                  minimum: 0
+                  maximum: 2
+                  default: 1
+                  description: >-
+                    0 = observe (emergency brake, all mutations refused),
+                    1 = copilot (approval-gated, default),
+                    2 = autopilot in spec.namespaces (CRITICAL and opaque
+                    payloads still gated; protected namespaces still refused)
+                namespaces:
+                  type: array
+                  items:
+                    type: string
+                  description: Namespaces this policy applies to
+                dryRunDefault:
+                  type: boolean
+                  default: false
+                rules:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      action:
+                        type: string
+                        description: "Verb: delete, scale, patch, create, etc."
+                      resource:
+                        type: string
+                        description: "Resource type: deployment, pod, namespace, etc."
+                      requireApproval:
+                        type: boolean
+                        default: true
+                      maxReplicas:
+                        type: integer
+                      allowedNamespaces:
+                        type: array
+                        items:
+                          type: string
+                      blockedImages:
+                        type: array
+                        items:
+                          type: string
+                        description: Container images that must not be deployed
+            status:
+              type: object
+              properties:
+                active:
+                  type: boolean
+                rulesCount:
+                  type: integer
+                lastApplied:
+                  type: string
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Active
+          type: boolean
+          jsonPath: .status.active
+        - name: Rules
+          type: integer
+          jsonPath: .status.rulesCount
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

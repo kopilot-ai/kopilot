@@ -16,7 +16,7 @@ class MockPatch:
 
 @pytest.mark.asyncio
 async def test_aitask_create_missing_prompt():
-    from kubedevaiops.operator.handlers import on_aitask_create
+    from kopilot.operator.handlers import on_aitask_create
 
     patch_obj = MockPatch()
     await on_aitask_create(spec={}, name="test", namespace="default", patch=patch_obj, status={})
@@ -26,7 +26,7 @@ async def test_aitask_create_missing_prompt():
 
 @pytest.mark.asyncio
 async def test_aitask_create_success():
-    from kubedevaiops.operator.handlers import on_aitask_create
+    from kopilot.operator.handlers import on_aitask_create
 
     mock_run = AsyncMock(return_value={
         "task_id": "t-1",
@@ -36,7 +36,7 @@ async def test_aitask_create_success():
     })
 
     patch_obj = MockPatch()
-    with patch("kubedevaiops.agent.supervisor.run_task", mock_run):
+    with patch("kopilot.agent.supervisor.run_task", mock_run):
         await on_aitask_create(
             spec={"prompt": "check pods"},
             name="test-task",
@@ -54,12 +54,12 @@ async def test_aitask_create_success():
 @pytest.mark.asyncio
 async def test_aitask_create_failure_is_terminal():
     """Execution failures set Failed status and do NOT re-raise (no kopf retry)."""
-    from kubedevaiops.operator.handlers import on_aitask_create
+    from kopilot.operator.handlers import on_aitask_create
 
     mock_run = AsyncMock(side_effect=RuntimeError("LLM timeout"))
 
     patch_obj = MockPatch()
-    with patch("kubedevaiops.agent.supervisor.run_task", mock_run):
+    with patch("kopilot.agent.supervisor.run_task", mock_run):
         await on_aitask_create(
             spec={"prompt": "do something"},
             name="fail-task",
@@ -75,14 +75,14 @@ async def test_aitask_create_failure_is_terminal():
 @pytest.mark.asyncio
 async def test_aitask_idempotent_on_retry():
     """A completed task with an unchanged spec must not re-execute."""
-    from kubedevaiops.operator.handlers import _spec_hash, on_aitask_create
+    from kopilot.operator.handlers import _spec_hash, on_aitask_create
 
     spec = {"prompt": "check pods"}
     mock_run = AsyncMock()
 
     patch_obj = MockPatch()
     existing_status = {"phase": "Completed", "specHash": _spec_hash(spec)}
-    with patch("kubedevaiops.agent.supervisor.run_task", mock_run):
+    with patch("kopilot.agent.supervisor.run_task", mock_run):
         await on_aitask_create(
             spec=spec, name="done-task", namespace="default",
             patch=patch_obj, status=existing_status,
@@ -94,7 +94,7 @@ async def test_aitask_idempotent_on_retry():
 
 @pytest.mark.asyncio
 async def test_aitask_update_reruns_on_spec_change():
-    from kubedevaiops.operator.handlers import _spec_hash, on_aitask_update
+    from kopilot.operator.handlers import _spec_hash, on_aitask_update
 
     mock_run = AsyncMock(return_value={
         "task_id": "t-2", "answer": "Rerun done.", "risk_level": "low", "elapsed_ms": 5,
@@ -102,7 +102,7 @@ async def test_aitask_update_reruns_on_spec_change():
 
     patch_obj = MockPatch()
     old_status = {"phase": "Completed", "specHash": _spec_hash({"prompt": "old prompt"})}
-    with patch("kubedevaiops.agent.supervisor.run_task", mock_run):
+    with patch("kopilot.agent.supervisor.run_task", mock_run):
         await on_aitask_update(
             spec={"prompt": "new prompt"}, name="task", namespace="default",
             patch=patch_obj, status=old_status,
@@ -115,7 +115,7 @@ async def test_aitask_update_reruns_on_spec_change():
 @pytest.mark.asyncio
 async def test_condition_transition_time_stable():
     """lastTransitionTime must not change when the condition status is unchanged."""
-    from kubedevaiops.operator.handlers import _set_condition
+    from kopilot.operator.handlers import _set_condition
 
     patch_obj = MockPatch()
     _set_condition(patch_obj, "Ready", "True", "Completed", "done")
@@ -131,7 +131,7 @@ async def test_condition_transition_time_stable():
 
 @pytest.mark.asyncio
 async def test_aiskill_create():
-    from kubedevaiops.operator.handlers import on_aiskill_create
+    from kopilot.operator.handlers import on_aiskill_create
 
     patch_obj = MockPatch()
     await on_aiskill_create(
@@ -146,7 +146,7 @@ async def test_aiskill_create():
 
 @pytest.mark.asyncio
 async def test_aiskill_disabled():
-    from kubedevaiops.operator.handlers import on_aiskill_create
+    from kopilot.operator.handlers import on_aiskill_create
 
     patch_obj = MockPatch()
     await on_aiskill_create(
@@ -160,7 +160,7 @@ async def test_aiskill_disabled():
 
 @pytest.mark.asyncio
 async def test_aipolicy_create():
-    from kubedevaiops.operator.handlers import on_aipolicy_create
+    from kopilot.operator.handlers import on_aipolicy_create
 
     patch_obj = MockPatch()
     await on_aipolicy_create(
@@ -192,11 +192,11 @@ def _skill_spec(**overrides):
 async def test_aiskill_create_registers_skill():
     from unittest.mock import MagicMock
 
-    from kubedevaiops.operator.handlers import on_aiskill_create
+    from kopilot.operator.handlers import on_aiskill_create
 
     registry = MagicMock()
     patch_obj = MockPatch()
-    with patch("kubedevaiops.skills.base.get_registry", return_value=registry):
+    with patch("kopilot.skills.base.get_registry", return_value=registry):
         await on_aiskill_create(
             spec=_skill_spec(), name="finops-extras", patch=patch_obj, status={}
         )
@@ -213,11 +213,11 @@ async def test_aiskill_create_registers_skill():
 async def test_aiskill_create_without_prompt_is_invalid():
     from unittest.mock import MagicMock
 
-    from kubedevaiops.operator.handlers import on_aiskill_create
+    from kopilot.operator.handlers import on_aiskill_create
 
     registry = MagicMock()
     patch_obj = MockPatch()
-    with patch("kubedevaiops.skills.base.get_registry", return_value=registry):
+    with patch("kopilot.skills.base.get_registry", return_value=registry):
         await on_aiskill_create(
             spec=_skill_spec(systemPrompt=""), name="broken", patch=patch_obj, status={}
         )
@@ -230,11 +230,11 @@ async def test_aiskill_create_without_prompt_is_invalid():
 async def test_aiskill_disabled_unregisters():
     from unittest.mock import MagicMock
 
-    from kubedevaiops.operator.handlers import on_aiskill_create, on_aiskill_update
+    from kopilot.operator.handlers import on_aiskill_create, on_aiskill_update
 
     registry = MagicMock()
     patch_obj = MockPatch()
-    with patch("kubedevaiops.skills.base.get_registry", return_value=registry):
+    with patch("kopilot.skills.base.get_registry", return_value=registry):
         await on_aiskill_create(
             spec=_skill_spec(enabled=False), name="off-skill", patch=patch_obj, status={}
         )
@@ -252,10 +252,10 @@ async def test_aiskill_disabled_unregisters():
 async def test_aiskill_delete_unregisters():
     from unittest.mock import MagicMock
 
-    from kubedevaiops.operator.handlers import on_aiskill_delete
+    from kopilot.operator.handlers import on_aiskill_delete
 
     registry = MagicMock()
-    with patch("kubedevaiops.skills.base.get_registry", return_value=registry):
+    with patch("kopilot.skills.base.get_registry", return_value=registry):
         await on_aiskill_delete(name="finops-extras")
     registry.unregister.assert_called_with("finops-extras")
 
@@ -264,12 +264,12 @@ async def test_aiskill_delete_unregisters():
 async def test_aiskill_register_failure_sets_failed():
     from unittest.mock import MagicMock
 
-    from kubedevaiops.operator.handlers import on_aiskill_create
+    from kopilot.operator.handlers import on_aiskill_create
 
     registry = MagicMock()
     registry.register.side_effect = RuntimeError("no LLM configured")
     patch_obj = MockPatch()
-    with patch("kubedevaiops.skills.base.get_registry", return_value=registry):
+    with patch("kopilot.skills.base.get_registry", return_value=registry):
         await on_aiskill_create(
             spec=_skill_spec(), name="finops-extras", patch=patch_obj, status={}
         )
@@ -282,8 +282,8 @@ async def test_aiskill_register_failure_sets_failed():
 
 @pytest.mark.asyncio
 async def test_aipolicy_autopilot_grant():
-    from kubedevaiops.executor.autonomy import get_engine
-    from kubedevaiops.operator.handlers import on_aipolicy_create
+    from kopilot.executor.autonomy import get_engine
+    from kopilot.operator.handlers import on_aipolicy_create
 
     patch_obj = MockPatch()
     await on_aipolicy_create(
@@ -299,8 +299,8 @@ async def test_aipolicy_autopilot_grant():
 
 @pytest.mark.asyncio
 async def test_aipolicy_brake():
-    from kubedevaiops.executor.autonomy import get_engine
-    from kubedevaiops.operator.handlers import on_aipolicy_create, on_aipolicy_delete
+    from kopilot.executor.autonomy import get_engine
+    from kopilot.operator.handlers import on_aipolicy_create, on_aipolicy_delete
 
     patch_obj = MockPatch()
     await on_aipolicy_create(
@@ -315,8 +315,8 @@ async def test_aipolicy_brake():
 
 @pytest.mark.asyncio
 async def test_aipolicy_autopilot_without_namespaces_is_invalid():
-    from kubedevaiops.executor.autonomy import get_engine
-    from kubedevaiops.operator.handlers import on_aipolicy_create
+    from kopilot.executor.autonomy import get_engine
+    from kopilot.operator.handlers import on_aipolicy_create
 
     patch_obj = MockPatch()
     await on_aipolicy_create(
@@ -328,8 +328,8 @@ async def test_aipolicy_autopilot_without_namespaces_is_invalid():
 
 @pytest.mark.asyncio
 async def test_aipolicy_update_to_copilot_removes_grant():
-    from kubedevaiops.executor.autonomy import get_engine
-    from kubedevaiops.operator.handlers import on_aipolicy_create, on_aipolicy_update
+    from kopilot.executor.autonomy import get_engine
+    from kopilot.operator.handlers import on_aipolicy_create, on_aipolicy_update
 
     patch_obj = MockPatch()
     await on_aipolicy_create(
@@ -345,8 +345,8 @@ async def test_aipolicy_update_to_copilot_removes_grant():
 
 @pytest.mark.asyncio
 async def test_aipolicy_delete_removes_grant():
-    from kubedevaiops.executor.autonomy import get_engine
-    from kubedevaiops.operator.handlers import on_aipolicy_create, on_aipolicy_delete
+    from kopilot.executor.autonomy import get_engine
+    from kopilot.operator.handlers import on_aipolicy_create, on_aipolicy_delete
 
     patch_obj = MockPatch()
     await on_aipolicy_create(
