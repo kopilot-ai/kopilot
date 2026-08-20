@@ -22,6 +22,16 @@ spec:
             spec:
               type: object
               properties:
+                autonomyLevel:
+                  type: integer
+                  minimum: 0
+                  maximum: 2
+                  default: 1
+                  description: >-
+                    0 = observe (emergency brake, all mutations refused),
+                    1 = copilot (approval-gated, default),
+                    2 = autopilot in spec.namespaces (CRITICAL and opaque
+                    payloads still gated; protected namespaces still refused)
                 namespaces:
                   type: array
                   items:

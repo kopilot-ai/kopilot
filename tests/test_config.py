@@ -49,4 +49,4 @@ def test_safety_max_concurrent_tasks():
 
 
 def test_observability_defaults():
-    cfg = get_settings()
+    get_settings()

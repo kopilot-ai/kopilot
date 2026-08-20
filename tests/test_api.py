@@ -251,3 +251,16 @@ def test_approvals_deny(client):
 
 def test_approvals_unknown_status_filter(client):
     assert client.get("/approvals", params={"status": "bogus"}).status_code == 400
+
+
+def test_autonomy_endpoint_requires_auth(auth_client):
+    r = auth_client.get("/autonomy")
+    assert r.status_code == 401
+
+
+def test_autonomy_endpoint_snapshot(auth_client, autonomy_staging):
+    r = auth_client.get("/autonomy", headers={"Authorization": "Bearer sekrit-token"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["observe"] is False
+    assert body["grants"] == [{"name": "staging-autopilot", "namespaces": ["staging"]}]

@@ -255,6 +255,13 @@ def create_app(with_event_watcher: bool = False) -> FastAPI:
 
     # ── Approvals ───────────────────────────────────────────────────────────
 
+    @app.get("/autonomy", dependencies=[Depends(_require_auth)])
+    async def autonomy_state():
+        """Effective autonomy dial: level, brakes, and autopilot grants."""
+        from kubedevaiops.executor.autonomy import get_engine
+
+        return get_engine().snapshot()
+
     @app.get("/approvals", dependencies=[Depends(_require_auth)])
     async def list_approvals(status: str | None = None):
         store = get_approval_store()

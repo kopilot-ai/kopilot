@@ -222,7 +222,39 @@ def _pre_flight(command: str) -> SafetyVerdict:
 
 async def _guarded_run(command: str, tool_name: str) -> str:
     """Common safety pipeline + execution for the kubectl/helm/shell tools."""
+    from kubedevaiops.executor.autonomy import AutonomyDecision, get_engine
+
     verdict = _pre_flight(command)
+
+    decision = get_engine().decide(
+        command, tool_name, verdict.risk, verdict.requires_approval
+    )
+    if decision is AutonomyDecision.REFUSE:
+        log_event("executor.observe_refused", command=command[:200], tool=tool_name)
+        return (
+            "OBSERVE MODE (autonomy level 0): mutating commands are refused. "
+            "Report what you would have done instead."
+        )
+    if decision is AutonomyDecision.AUTO_APPROVE:
+        store = get_approval_store()
+        policy = get_engine().granting_policy(command, verdict.risk) or "unknown"
+        record = store.record_auto(
+            command=command,
+            tool=tool_name,
+            reason=verdict.reason,
+            risk=verdict.risk.value,
+            policy=policy,
+        )
+        log_event(
+            f"executor.{tool_name}.auto_approved",
+            command=command[:200],
+            approval_id=record.id,
+            policy=policy,
+        )
+        try:
+            return await _exec(command)
+        except CommandTimeoutError as e:
+            return f"ERROR: {e}"
 
     if verdict.requires_approval:
         store = get_approval_store()

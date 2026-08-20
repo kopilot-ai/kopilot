@@ -29,6 +29,9 @@ def _set_test_env(monkeypatch):
     import kubedevaiops.executor.approvals as approvals_mod
     approvals_mod._store = None
 
+    from kubedevaiops.executor import autonomy as autonomy_mod
+    autonomy_mod.reset_engine()
+
 
 @pytest.fixture
 def mock_subprocess(monkeypatch):
@@ -39,3 +42,25 @@ def mock_subprocess(monkeypatch):
         return 0, "mocked output"
 
     monkeypatch.setattr(middleware, "_run_once", _fake_run_once)
+
+
+@pytest.fixture
+def autonomy_staging():
+    """Autopilot grant for the staging namespace (max MEDIUM)."""
+    from kubedevaiops.executor.autonomy import AutopilotGrant, get_engine, reset_engine
+
+    get_engine().set_grant(
+        AutopilotGrant(name="staging-autopilot", namespaces=["staging"])
+    )
+    yield
+    reset_engine()
+
+
+@pytest.fixture
+def autonomy_observe():
+    """Observe mode via an emergency-brake policy."""
+    from kubedevaiops.executor.autonomy import get_engine, reset_engine
+
+    get_engine().set_brake("test-brake")
+    yield
+    reset_engine()

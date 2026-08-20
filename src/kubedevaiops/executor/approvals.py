@@ -233,6 +233,32 @@ class ApprovalStore:
             log_event("approval.denied", approval_id=approval_id, by=decided_by)
         return req
 
+    def record_auto(
+        self, command: str, tool: str, reason: str, risk: str, policy: str
+    ) -> ApprovalRequest:
+        """Record a policy-approved execution in the same audit queue."""
+        now = time.time()
+        req = ApprovalRequest(
+            command=command,
+            tool=tool,
+            reason=reason,
+            risk=risk,
+            status=ApprovalStatus.CONSUMED,
+            decided_at=now,
+            decided_by=f"policy:{policy}",
+        )
+        with self._lock:
+            self._requests[req.id] = req
+            self._persist_locked(req)
+        log_event(
+            "approval.auto_approved",
+            approval_id=req.id,
+            command=command[:200],
+            risk=risk,
+            policy=policy,
+        )
+        return req
+
     def consume_if_approved(self, command: str) -> ApprovalRequest | None:
         """If an unexpired approval exists for this command, consume and return it."""
         normalized = _normalize(command)

@@ -108,6 +108,17 @@ class SafetySettings(BaseSettings):
     read_paths: list[str] = ["/etc/kubedevaiops"]
 
 
+class AutonomySettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="AUTONOMY_", extra="ignore")
+
+    # 0 = observe (mutations refused), 1 = copilot (approval-gated, default),
+    # 2 = autopilot in the namespaces below.
+    level: int = 1
+    # Namespaces the env-level autopilot grant covers (level 2 only).
+    # CRITICAL commands and opaque payloads are never auto-approved.
+    autopilot_namespaces: list[str] = []
+
+
 class ApprovalSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="APPROVALS_", extra="ignore")
 
@@ -142,6 +153,7 @@ class Settings(BaseSettings):
     slack: SlackSettings = Field(default_factory=SlackSettings)
     safety: SafetySettings = Field(default_factory=SafetySettings)
     approvals: ApprovalSettings = Field(default_factory=ApprovalSettings)
+    autonomy: AutonomySettings = Field(default_factory=AutonomySettings)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
 
     enabled_skills: list[str] = [
