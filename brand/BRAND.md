@@ -20,6 +20,10 @@ Rules: the pointer always sits at position 2 (upper right). Never rotate,
 recolor, or add a fourth tick. The dial replaces the first "o" in the
 wordmark and nothing else, ever.
 
+The brand board lives in Canva
+([view](https://www.canva.com/d/dbcSuuqVMUTzsxm), `brand-board.png` here is
+the export) alongside the uploaded dial assets.
+
 ## Color
 
 | Token | Hex | Role |
