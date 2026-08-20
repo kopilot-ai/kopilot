@@ -109,6 +109,9 @@ service:
 
 podSecurityContext:
   runAsNonRoot: true
+  # Image user is UID 10001; fsGroup makes /data writable for the
+  # SQLite-backed approval store.
+  fsGroup: 10001
   seccompProfile:
     type: RuntimeDefault
 
