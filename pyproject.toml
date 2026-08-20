@@ -7,7 +7,7 @@ name = "kubedevaiops"
 version = "0.3.0"
 description = "Kopilot is an autonomous AI-powered Kubernetes operations agent"
 readme = "README.md"
-license = {text = "MIT"}
+license = {text = "Apache-2.0"}
 requires-python = ">=3.11"
 authors = [
     {name = "Riadh HAJ AMOR"},
@@ -16,7 +16,7 @@ keywords = ["kubernetes", "aiops", "devops", "langchain", "operator", "autonomou
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: System Administrators",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
