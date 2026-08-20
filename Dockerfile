@@ -18,8 +18,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-get purge -y --auto-remove curl && \
     rm -rf /var/lib/apt/lists/* kubectl kubectl.sha256 helm-* linux-amd64
 
-RUN groupadd -r kubedevaiops && \
-    useradd -r -g kubedevaiops -d /home/kubedevaiops -m kubedevaiops
+RUN groupadd -r -g 10001 kubedevaiops && \
+    useradd -r -u 10001 -g kubedevaiops -d /home/kubedevaiops -m kubedevaiops
 
 WORKDIR /app
 
@@ -30,10 +30,11 @@ RUN pip install --no-cache-dir .
 COPY src/ /app/src/
 RUN pip install --no-cache-dir --no-deps .
 
-USER kubedevaiops
+# Numeric UID so Kubernetes runAsNonRoot can verify the user
+USER 10001:10001
 ENV PYTHONUNBUFFERED=1 \
     HOME=/home/kubedevaiops
-EXPOSE 8080 9090
+EXPOSE 8080
 
 LABEL org.opencontainers.image.title="Kopilot" \
       org.opencontainers.image.description="Approval-gated AI Kubernetes operations agent" \
