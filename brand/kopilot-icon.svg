@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Kopilot">
+<rect width="512" height="512" rx="112" fill="#10141F"/>
+<line x1="101.85" y1="167.0" x2="72.4" y2="150.0" stroke="#F4F1EA" stroke-width="26" stroke-linecap="round"/>
+<line x1="256.0" y1="78.0" x2="256.0" y2="44.0" stroke="#F4F1EA" stroke-width="26" stroke-linecap="round"/>
+<line x1="410.15" y1="167.0" x2="439.6" y2="150.0" stroke="#F4F1EA" stroke-width="26" stroke-linecap="round"/>
+<circle cx="256.0" cy="256.0" r="150" fill="#F4F1EA"/>
+<line x1="285.44" y1="239.0" x2="358.19" y2="197.0" stroke="#FF4F1F" stroke-width="34" stroke-linecap="round"/>
+</svg>
