@@ -7,7 +7,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from kubedevaiops.__main__ import cli
+from kopilot.__main__ import cli
 
 
 def test_cli_help_uses_kopilot_branding():
@@ -28,8 +28,8 @@ def test_pyproject_exposes_public_and_legacy_entrypoints():
     pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
     scripts = pyproject["project"]["scripts"]
 
-    assert scripts["kopilot"] == "kubedevaiops.__main__:cli"
-    assert scripts["kubedevaiops"] == scripts["kopilot"]
+    assert scripts["kopilot"] == "kopilot.__main__:cli"
+    assert scripts["kopilot"] == scripts["kopilot"]
 
 
 def test_mcp_command_help():

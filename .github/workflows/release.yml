@@ -52,6 +52,6 @@ jobs:
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Package chart
-        run: helm package helm/kubedevaiops --version "${GITHUB_REF_NAME#v}" --app-version "${GITHUB_REF_NAME#v}"
+        run: helm package helm/kopilot --version "${GITHUB_REF_NAME#v}" --app-version "${GITHUB_REF_NAME#v}"
       - name: Push chart
-        run: helm push kubedevaiops-*.tgz oci://ghcr.io/kopilot-ai/charts
+        run: helm push kopilot-*.tgz oci://ghcr.io/kopilot-ai/charts

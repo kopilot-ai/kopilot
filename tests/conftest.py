@@ -14,29 +14,29 @@ def _set_test_env(monkeypatch):
     monkeypatch.setenv("SAFETY_REQUIRE_APPROVAL_DESTRUCTIVE", "true")
     monkeypatch.setenv("LOG_FORMAT", "console")
 
-    import kubedevaiops.config as cfg_mod
+    import kopilot.config as cfg_mod
     cfg_mod._settings = None
 
-    import kubedevaiops.skills.base as skill_mod
+    import kopilot.skills.base as skill_mod
     skill_mod._registry = None
 
-    import kubedevaiops.agent.llm as llm_mod
+    import kopilot.agent.llm as llm_mod
     llm_mod._chat_model = None
 
-    import kubedevaiops.agent.memory as mem_mod
+    import kopilot.agent.memory as mem_mod
     mem_mod._checkpointer = None
 
-    import kubedevaiops.executor.approvals as approvals_mod
+    import kopilot.executor.approvals as approvals_mod
     approvals_mod._store = None
 
-    from kubedevaiops.executor import autonomy as autonomy_mod
+    from kopilot.executor import autonomy as autonomy_mod
     autonomy_mod.reset_engine()
 
 
 @pytest.fixture
 def mock_subprocess(monkeypatch):
     """Stub out subprocess execution in the executor middleware."""
-    from kubedevaiops.executor import middleware
+    from kopilot.executor import middleware
 
     async def _fake_run_once(cmd, timeout):
         return 0, "mocked output"
@@ -47,7 +47,7 @@ def mock_subprocess(monkeypatch):
 @pytest.fixture
 def autonomy_staging():
     """Autopilot grant for the staging namespace (max MEDIUM)."""
-    from kubedevaiops.executor.autonomy import AutopilotGrant, get_engine, reset_engine
+    from kopilot.executor.autonomy import AutopilotGrant, get_engine, reset_engine
 
     get_engine().set_grant(
         AutopilotGrant(name="staging-autopilot", namespaces=["staging"])
@@ -59,7 +59,7 @@ def autonomy_staging():
 @pytest.fixture
 def autonomy_observe():
     """Observe mode via an emergency-brake policy."""
-    from kubedevaiops.executor.autonomy import get_engine, reset_engine
+    from kopilot.executor.autonomy import get_engine, reset_engine
 
     get_engine().set_brake("test-brake")
     yield

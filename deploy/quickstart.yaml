@@ -1,6 +1,6 @@
 # Kopilot quickstart manifest — FOR LAB/EVALUATION CLUSTERS ONLY.
 #
-# Apply CRDs first:   kubectl apply -f helm/kubedevaiops/crds/
+# Apply CRDs first:   kubectl apply -f helm/kopilot/crds/
 # Then this file:     kubectl apply -f deploy/quickstart.yaml
 #
 # The service account below gets a scoped ClusterRole (read-most, write on
@@ -12,13 +12,13 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: kubedevaiops
+  name: kopilot
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: kubedevaiops-config
-  namespace: kubedevaiops
+  name: kopilot-config
+  namespace: kopilot
 data:
   LLM_PROVIDER: "ollama"
   LLM_MODEL: "gpt-oss:20b"
@@ -34,13 +34,13 @@ data:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: kubedevaiops
-  namespace: kubedevaiops
+  name: kopilot
+  namespace: kopilot
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: kubedevaiops-quickstart
+  name: kopilot-quickstart
 rules:
   - apiGroups: [""]
     resources: ["pods", "pods/log", "services", "endpoints", "events",
@@ -66,7 +66,7 @@ rules:
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods", "nodes"]
     verbs: ["get", "list"]
-  - apiGroups: ["kubedevaiops.io"]
+  - apiGroups: ["kopilot-ai.github.io"]
     resources: ["aitasks", "aitasks/status", "aiskills", "aiskills/status",
                 "aipolicies", "aipolicies/status"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
@@ -80,32 +80,32 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: kubedevaiops-quickstart
+  name: kopilot-quickstart
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: kubedevaiops-quickstart
+  name: kopilot-quickstart
 subjects:
   - kind: ServiceAccount
-    name: kubedevaiops
-    namespace: kubedevaiops
+    name: kopilot
+    namespace: kopilot
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kubedevaiops
-  namespace: kubedevaiops
+  name: kopilot
+  namespace: kopilot
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: kubedevaiops
+      app: kopilot
   template:
     metadata:
       labels:
-        app: kubedevaiops
+        app: kopilot
     spec:
-      serviceAccountName: kubedevaiops
+      serviceAccountName: kopilot
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -123,7 +123,7 @@ spec:
               name: http
           envFrom:
             - configMapRef:
-                name: kubedevaiops-config
+                name: kopilot-config
           livenessProbe:
             httpGet:
               path: /health
@@ -145,8 +145,8 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: kubedevaiops
-  namespace: kubedevaiops
+  name: kopilot
+  namespace: kopilot
 spec:
   type: NodePort
   ports:
@@ -154,4 +154,4 @@ spec:
       targetPort: 8080
       nodePort: 30080
   selector:
-    app: kubedevaiops
+    app: kopilot

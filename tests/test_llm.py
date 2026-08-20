@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from kubedevaiops.agent.llm import get_chat_model, reset_chat_model
-from kubedevaiops.config import LLMProvider
+from kopilot.agent.llm import get_chat_model, reset_chat_model
+from kopilot.config import LLMProvider
 
 
 def test_ollama_provider_returns_chat_model():
@@ -19,7 +19,7 @@ def test_ollama_provider_returns_chat_model():
 
 def test_gemini_provider_creates_model(monkeypatch):
     """Test Gemini factory path by mocking the settings to return Gemini provider."""
-    from kubedevaiops.config import GeminiSettings
+    from kopilot.config import GeminiSettings
 
     mock_gemini_with_key = MagicMock(spec=GeminiSettings)
     mock_gemini_with_key.api_key = "test-key"
@@ -34,7 +34,7 @@ def test_gemini_provider_creates_model(monkeypatch):
     mock_settings.gemini = mock_gemini_with_key
 
     reset_chat_model()
-    with patch("kubedevaiops.agent.llm.get_settings", return_value=mock_settings):
+    with patch("kopilot.agent.llm.get_settings", return_value=mock_settings):
         model = get_chat_model()
     assert model is not None
     assert "Google" in type(model).__name__
@@ -48,7 +48,7 @@ def test_unsupported_provider_raises():
 
     reset_chat_model()
     with (
-        patch("kubedevaiops.agent.llm.get_settings", return_value=mock_settings),
+        patch("kopilot.agent.llm.get_settings", return_value=mock_settings),
         pytest.raises(ValueError, match="Unsupported LLM provider"),
     ):
         get_chat_model()
@@ -80,7 +80,7 @@ def test_anthropic_provider_creates_model():
     mock_settings.anthropic.api_key = "test-key"
 
     reset_chat_model()
-    with patch("kubedevaiops.agent.llm.get_settings", return_value=mock_settings):
+    with patch("kopilot.agent.llm.get_settings", return_value=mock_settings):
         model = get_chat_model()
     assert model is not None
     assert "Anthropic" in type(model).__name__

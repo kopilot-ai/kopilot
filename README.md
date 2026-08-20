@@ -15,8 +15,9 @@ action waits for a human approval. When a namespace has earned your trust,
 an AIPolicy grants autopilot there, and Kopilot acts on its own, on the same
 audit trail. A second AIPolicy is the emergency brake.
 
-> Naming note: the Python package and Kubernetes API group are `kubedevaiops`;
-> the CLI is available as both `kopilot` and `kubedevaiops`.
+> Since 0.4.0 the name is uniform: package, CLI, chart, and metrics are all
+> `kopilot`, and the CRD API group is `kopilot-ai.github.io`. The former
+> `kubedevaiops` names are gone; see CHANGELOG for the migration.
 
 **Built for**
 - Platform and DevOps teams managing noisy multi-namespace clusters
@@ -48,7 +49,7 @@ What the first run should give you:
 | 2 | Autopilot | Namespace-scoped grants. Kopilot executes gated commands on its own only when every namespace the command names sits inside a grant. CRITICAL commands, opaque payloads (`kubectl exec/cp/attach`), and shell commands are never auto-approved; protected namespaces stay refused. |
 
 ```yaml
-apiVersion: kubedevaiops.io/v1alpha1
+apiVersion: kopilot-ai.github.io/v1alpha1
 kind: AIPolicy
 metadata:
   name: staging-autopilot
@@ -245,7 +246,7 @@ Set `SKILL_DIRS=/path/to/extra/skills` or mount a ConfigMap.
 ### Install on a cluster (Helm, one command)
 
 ```bash
-helm install kopilot oci://ghcr.io/kopilot-ai/charts/kubedevaiops \
+helm install kopilot oci://ghcr.io/kopilot-ai/charts/kopilot \
   --version 0.3.0 --namespace kopilot --create-namespace \
   --set llm.provider=gemini \
   --set gemini.apiKey=$GEMINI_API_KEY \
@@ -335,7 +336,7 @@ All settings via environment variables or `.env` file:
 | `AUTONOMY_AUTOPILOT_NAMESPACES` | `[]` | Namespaces the env-level autopilot grant covers |
 | `APPROVALS_DB_PATH` | (empty) | SQLite file for the approval queue; set for restart-durable approvals |
 | `SAFETY_MAX_CONCURRENT_TASKS` | `5` | Concurrent task limit |
-| `SAFETY_READ_PATHS` | `["/etc/kubedevaiops"]` | Directories `read_resource` may read |
+| `SAFETY_READ_PATHS` | `["/etc/kopilot"]` | Directories `read_resource` may read |
 | `SLACK_ALLOWED_USERS` | `[]` | Slack user IDs allowed to run tasks |
 | `ENABLED_SKILLS` | all 6 built-ins | JSON list of skill names |
 | `SKILL_DIRS` | (empty) | Extra dirs (`;`-separated on Windows, `:`-separated on Linux) |
@@ -347,7 +348,7 @@ All settings via environment variables or `.env` file:
 ### Helm Chart
 
 ```bash
-helm install kubedevaiops ./helm/kubedevaiops \
+helm install kopilot ./helm/kopilot \
   --set ollama.baseUrl=http://ollama:11434 \
   --set llm.model="gpt-oss:20b"
 ```
@@ -355,14 +356,14 @@ helm install kubedevaiops ./helm/kubedevaiops \
 ### Direct Kubernetes
 
 ```bash
-kubectl apply -f helm/kubedevaiops/crds/
+kubectl apply -f helm/kopilot/crds/
 kubectl apply -f deploy/quickstart.yaml
 ```
 
 ### Custom Resource
 
 ```yaml
-apiVersion: kubedevaiops.io/v1alpha1
+apiVersion: kopilot-ai.github.io/v1alpha1
 kind: AITask
 metadata:
   name: security-audit
@@ -408,7 +409,7 @@ make build-podman         # Build container image with Podman
 ```bash
 podman machine start
 bash scripts/setup-local-k8s.sh
-kubectl apply -f helm/kubedevaiops/crds/
+kubectl apply -f helm/kopilot/crds/
 ```
 
 ### Running Tests
@@ -428,7 +429,7 @@ python scripts/smoke_e2e.py ollama
 ## Project Structure
 
 ```
-src/kubedevaiops/
+src/kopilot/
 ├── agent/
 │   ├── supervisor.py    # Main coordinator with reflection loop
 │   ├── subagent.py      # Factory: builds agent from YAML skill definition

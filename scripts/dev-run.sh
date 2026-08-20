@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Run KubeDevAIOps locally for development (outside the cluster).
+# Run Kopilot locally for development (outside the cluster).
 # Assumes: Ollama running locally, kubectl configured.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -25,7 +25,7 @@ echo "[INFO] Installing dependencies..."
 pip install -e ".[dev]" --quiet
 
 echo "[INFO] Installing CRDs..."
-kubectl apply -f helm/kubedevaiops/crds/ 2>/dev/null || echo "[WARN] Could not install CRDs (cluster not available?)"
+kubectl apply -f helm/kopilot/crds/ 2>/dev/null || echo "[WARN] Could not install CRDs (cluster not available?)"
 
-echo "[INFO] Starting KubeDevAIOps agent..."
-python -m kubedevaiops serve
+echo "[INFO] Starting Kopilot agent..."
+python -m kopilot serve

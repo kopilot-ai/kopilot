@@ -3,7 +3,7 @@
 Runnable examples for every input surface. Apply the CRDs first:
 
 ```bash
-kubectl apply -f ../helm/kubedevaiops/crds/
+kubectl apply -f ../helm/kopilot/crds/
 ```
 
 | File | What it shows |

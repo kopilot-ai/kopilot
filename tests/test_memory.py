@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from kubedevaiops.agent.memory import (
+from kopilot.agent.memory import (
     IncidentMemory,
     TaskContext,
     get_checkpointer,

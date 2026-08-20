@@ -1,7 +1,7 @@
 """Tests for configuration."""
 
 
-from kubedevaiops.config import GeminiSettings, LLMProvider, get_settings
+from kopilot.config import GeminiSettings, LLMProvider, get_settings
 
 
 def test_defaults():
@@ -32,7 +32,7 @@ def test_gemini_settings_from_env(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "test-key-123")
     monkeypatch.setenv("GEMINI_MODEL", "gemini-pro")
 
-    from kubedevaiops.config import GeminiSettings
+    from kopilot.config import GeminiSettings
     gs = GeminiSettings()
     assert gs.api_key == "test-key-123"
     assert gs.model == "gemini-pro"

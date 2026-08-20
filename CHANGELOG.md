@@ -5,6 +5,36 @@ All notable changes to Kopilot will be documented in this file.
 The format loosely follows Keep a Changelog and is intended to become the
 release companion for future tags and GitHub releases.
 
+## [0.4.0] - 2026-08-20
+
+### Changed (breaking)
+
+- **One name everywhere.** The `kubedevaiops` era ends: the Python package,
+  CLI, Helm chart, container paths, and metrics prefix are all `kopilot`.
+  The CRD API group moves from `kubedevaiops.io` to `kopilot-ai.github.io`,
+  because a CRD group should be a domain the project actually controls and
+  the GitHub Pages domain is the one we do; `kubedevaiops.io` was never ours
+  to squat.
+
+Migration from 0.3.x:
+
+- CLI: `kubedevaiops` is gone; call `kopilot`. Python imports:
+  `import kopilot` replaces `import kubedevaiops`.
+- Helm: the chart is `oci://ghcr.io/kopilot-ai/charts/kopilot`. Uninstall the
+  old release, delete the old CRDs
+  (`kubectl delete crd aitasks.kubedevaiops.io aiskills.kubedevaiops.io aipolicies.kubedevaiops.io`),
+  then install 0.4.0; new CRDs install with the chart. AITask/AISkill/AIPolicy
+  resources must be re-applied with `apiVersion: kopilot-ai.github.io/v1alpha1`.
+- Metrics: dashboards tracking `kubedevaiops_*` series switch to `kopilot_*`.
+- Custom skills mounted at `/etc/kubedevaiops/skills` now mount at
+  `/etc/kopilot/skills` (chart handles this; only hand-rolled manifests care).
+- Pending approvals do not migrate: decide them before upgrading.
+
+### Added
+
+- The dial: new brand identity in `brand/` (mark, wordmark, icon, palette,
+  usage rules) and a Canva brand board.
+
 ## [0.3.0] - 2026-08-20
 
 ### Added

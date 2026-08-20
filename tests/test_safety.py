@@ -2,7 +2,7 @@
 
 import pytest
 
-from kubedevaiops.agent.safety import RiskLevel, assess_command, is_destructive, is_mutating
+from kopilot.agent.safety import RiskLevel, assess_command, is_destructive, is_mutating
 
 
 def test_block_delete_protected_ns():

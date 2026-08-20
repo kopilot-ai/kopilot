@@ -2,7 +2,7 @@
 
 IMAGE   ?= ghcr.io/kopilot-ai/kopilot
 TAG     ?= latest
-K8S_NS  ?= kubedevaiops
+K8S_NS  ?= kopilot
 HELM    ?= helm
 KUBECTL ?= kubectl
 
@@ -24,17 +24,17 @@ format: ## Auto-format code
 	ruff format src/ tests/
 
 helm-lint: ## Lint the Helm chart
-	$(HELM) lint helm/kubedevaiops
-	$(HELM) template test helm/kubedevaiops > /dev/null
+	$(HELM) lint helm/kopilot
+	$(HELM) template test helm/kopilot > /dev/null
 
 test: ## Run tests
-	pytest tests/ -v --cov=src/kubedevaiops --cov-report=term-missing
+	pytest tests/ -v --cov=src/kopilot --cov-report=term-missing
 
 run: ## Run the agent locally
-	python -m kubedevaiops serve
+	python -m kopilot serve
 
 run-operator: ## Run only the Kopf operator
-	python -m kubedevaiops operator
+	python -m kopilot operator
 
 build: ## Build container image
 	docker build -t $(IMAGE):$(TAG) .
@@ -46,15 +46,15 @@ push: ## Push container image
 	docker push $(IMAGE):$(TAG)
 
 deploy: ## Deploy via Helm
-	$(HELM) upgrade --install kubedevaiops helm/kubedevaiops \
+	$(HELM) upgrade --install kopilot helm/kopilot \
 		--namespace $(K8S_NS) --create-namespace \
 		--set image.repository=$(IMAGE) --set image.tag=$(TAG)
 
 undeploy: ## Remove Helm release
-	$(HELM) uninstall kubedevaiops --namespace $(K8S_NS)
+	$(HELM) uninstall kopilot --namespace $(K8S_NS)
 
 deploy-crds: ## Install only CRDs
-	$(KUBECTL) apply -f helm/kubedevaiops/crds/
+	$(KUBECTL) apply -f helm/kopilot/crds/
 
 local-k8s: ## Create local Kind cluster for development
 	bash scripts/setup-local-k8s.sh

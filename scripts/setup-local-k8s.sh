@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Setup a local Kubernetes cluster for KubeDevAIOps development.
+# Setup a local Kubernetes cluster for Kopilot development.
 # Supports: kind (preferred), k3d, minikube, or podman+kind.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-CLUSTER_NAME="${CLUSTER_NAME:-kubedevaiops-dev}"
+CLUSTER_NAME="${CLUSTER_NAME:-kopilot-dev}"
 
 info()  { echo "[INFO]  $*"; }
 warn()  { echo "[WARN]  $*"; }
@@ -64,8 +64,8 @@ create_cluster() {
 # ── Install CRDs ──────────────────────────────────────────────────────────
 
 install_crds() {
-    info "Installing KubeDevAIOps CRDs..."
-    kubectl apply -f "${PROJECT_DIR}/helm/kubedevaiops/crds/"
+    info "Installing Kopilot CRDs..."
+    kubectl apply -f "${PROJECT_DIR}/helm/kopilot/crds/"
     info "CRDs installed"
 }
 
@@ -86,7 +86,7 @@ install_metrics_server() {
 # ── Main ──────────────────────────────────────────────────────────────────
 
 main() {
-    info "=== KubeDevAIOps Local K8s Setup ==="
+    info "=== Kopilot Local K8s Setup ==="
     detect_runtime
     ensure_kind
     create_cluster
@@ -99,7 +99,7 @@ main() {
     info ""
     info "Next steps:"
     info "  1. Build image:  make build-podman  (or make build)"
-    info "  2. Load image:   kind load docker-image kubedevaiops/kubedevaiops:latest --name ${CLUSTER_NAME}"
+    info "  2. Load image:   kind load docker-image kopilot/kopilot:latest --name ${CLUSTER_NAME}"
     info "  3. Deploy:       kubectl apply -f deploy/quickstart.yaml"
     info "  4. Or use Helm:  make deploy"
 }

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from kubedevaiops.agent.safety import RiskLevel
-from kubedevaiops.executor.autonomy import (
+from kopilot.agent.safety import RiskLevel
+from kopilot.executor.autonomy import (
     AutonomyDecision,
     AutonomyEngine,
     AutopilotGrant,
@@ -121,18 +121,18 @@ class TestEngineFromSettings:
     def test_env_configured_grant(self, monkeypatch):
         monkeypatch.setenv("AUTONOMY_LEVEL", "2")
         monkeypatch.setenv("AUTONOMY_AUTOPILOT_NAMESPACES", '["staging","qa"]')
-        from kubedevaiops.config import reset_settings
+        from kopilot.config import reset_settings
         reset_settings()
-        from kubedevaiops.executor.autonomy import build_engine_from_settings
+        from kopilot.executor.autonomy import build_engine_from_settings
         eng = build_engine_from_settings()
         d = eng.decide("kubectl delete pod x -n qa", "kubectl", RiskLevel.MEDIUM, True)
         assert d is AutonomyDecision.AUTO_APPROVE
         reset_settings()
 
     def test_default_is_copilot(self):
-        from kubedevaiops.config import reset_settings
+        from kopilot.config import reset_settings
         reset_settings()
-        from kubedevaiops.executor.autonomy import build_engine_from_settings
+        from kopilot.executor.autonomy import build_engine_from_settings
         eng = build_engine_from_settings()
         d = eng.decide("kubectl delete pod x -n staging", "kubectl", RiskLevel.MEDIUM, True)
         assert d is AutonomyDecision.GATE
@@ -141,8 +141,8 @@ class TestEngineFromSettings:
 @pytest.mark.asyncio
 class TestExecutorIntegration:
     async def test_auto_approved_executes_and_audits(self, mock_subprocess, autonomy_staging):
-        from kubedevaiops.executor.approvals import get_approval_store
-        from kubedevaiops.executor.middleware import run_kubectl
+        from kopilot.executor.approvals import get_approval_store
+        from kopilot.executor.middleware import run_kubectl
 
         result = await run_kubectl.ainvoke({"command": "kubectl delete pod x -n staging"})
         assert "mocked output" in result
@@ -152,20 +152,20 @@ class TestExecutorIntegration:
         assert auto[0].status.value == "consumed"
 
     async def test_out_of_scope_still_gated(self, mock_subprocess, autonomy_staging):
-        from kubedevaiops.executor.middleware import run_kubectl
+        from kopilot.executor.middleware import run_kubectl
 
         result = await run_kubectl.ainvoke({"command": "kubectl delete pod x -n production"})
         assert "APPROVAL REQUIRED" in result
 
     async def test_observe_mode_refuses(self, mock_subprocess, autonomy_observe):
-        from kubedevaiops.executor.middleware import run_kubectl
+        from kopilot.executor.middleware import run_kubectl
 
         result = await run_kubectl.ainvoke({"command": "kubectl delete pod x -n staging"})
         assert "OBSERVE MODE" in result
         assert "mocked output" not in result
 
     async def test_observe_mode_allows_reads(self, mock_subprocess, autonomy_observe):
-        from kubedevaiops.executor.middleware import run_kubectl
+        from kopilot.executor.middleware import run_kubectl
 
         result = await run_kubectl.ainvoke({"command": "kubectl get pods -n staging"})
         assert "mocked output" in result

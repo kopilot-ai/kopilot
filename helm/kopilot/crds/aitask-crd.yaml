@@ -1,0 +1,91 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: aitasks.kopilot-ai.github.io
+spec:
+  group: kopilot-ai.github.io
+  names:
+    kind: AITask
+    listKind: AITaskList
+    plural: aitasks
+    singular: aitask
+    shortNames: [ait]
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [prompt]
+              properties:
+                prompt:
+                  type: string
+                  description: Natural-language task description
+                channel:
+                  type: string
+                  default: operator
+                  enum: [operator, api, slack, email, servicenow, event]
+                priority:
+                  type: string
+                  default: normal
+                  enum: [low, normal, high, critical]
+                approvalRequired:
+                  type: boolean
+                  default: false
+                approved:
+                  type: boolean
+                  default: false
+                skills:
+                  type: array
+                  items:
+                    type: string
+                  description: Hint which skills to prefer
+                user:
+                  type: string
+                  default: system
+                dryRun:
+                  type: boolean
+                  default: false
+                reflect:
+                  type: boolean
+                  default: false
+                  description: Run the self-review loop before returning
+                namespace:
+                  type: string
+                  description: Target namespace for the operation
+                metadata:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: [Pending, Planning, AwaitingApproval, Executing, Completed, Failed]
+                taskId:
+                  type: string
+                riskLevel:
+                  type: string
+                plan:
+                  type: string
+                result:
+                  type: string
+                message:
+                  type: string
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Risk
+          type: string
+          jsonPath: .status.riskLevel
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

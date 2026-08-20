@@ -10,8 +10,8 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi.testclient import TestClient
 
-import kubedevaiops.inputs.api as api_module
-from kubedevaiops.inputs.api import create_app
+import kopilot.inputs.api as api_module
+from kopilot.inputs.api import create_app
 
 WEBHOOK_SECRET = "test-webhook-secret"
 
@@ -25,7 +25,7 @@ def client():
 def auth_client(monkeypatch):
     """Client for an app with bearer auth enabled."""
     monkeypatch.setenv("API_AUTH_TOKEN", "sekrit-token")
-    import kubedevaiops.config as cfg_mod
+    import kopilot.config as cfg_mod
     cfg_mod._settings = None
     return TestClient(create_app())
 
@@ -34,7 +34,7 @@ def auth_client(monkeypatch):
 def webhook_client(monkeypatch):
     """Client for an app with the webhook secret configured."""
     monkeypatch.setenv("API_WEBHOOK_SECRET", WEBHOOK_SECRET)
-    import kubedevaiops.config as cfg_mod
+    import kopilot.config as cfg_mod
     cfg_mod._settings = None
     return TestClient(create_app())
 
@@ -91,7 +91,7 @@ def test_well_known_agent_manifest(client):
 def test_metrics_endpoint(client):
     resp = client.get("/metrics")
     assert resp.status_code == 200
-    assert "kubedevaiops" in resp.text
+    assert "kopilot" in resp.text
 
 
 def test_task_history_empty(client):
@@ -218,7 +218,7 @@ def test_webhook_missing_prompt(webhook_client):
 
 
 def test_approvals_flow(client, mock_subprocess):
-    from kubedevaiops.executor.approvals import get_approval_store
+    from kopilot.executor.approvals import get_approval_store
 
     store = get_approval_store()
     req = store.request(
@@ -240,7 +240,7 @@ def test_approvals_flow(client, mock_subprocess):
 
 
 def test_approvals_deny(client):
-    from kubedevaiops.executor.approvals import get_approval_store
+    from kopilot.executor.approvals import get_approval_store
 
     req = get_approval_store().request(
         command="helm uninstall prod-release", tool="helm",
@@ -270,7 +270,7 @@ def test_autonomy_endpoint_snapshot(auth_client, autonomy_staging):
 
 def test_approve_executes_the_signed_command(auth_client, mock_subprocess):
     """Approving runs the exact reviewed command and returns its output."""
-    from kubedevaiops.executor.approvals import get_approval_store
+    from kopilot.executor.approvals import get_approval_store
 
     req = get_approval_store().request(
         "kubectl scale deployment sleeper -n e2e --replicas=1",
@@ -288,7 +288,7 @@ def test_approve_executes_the_signed_command(auth_client, mock_subprocess):
 
 
 def test_approve_without_execute_keeps_old_flow(auth_client, mock_subprocess):
-    from kubedevaiops.executor.approvals import ApprovalStatus, get_approval_store
+    from kopilot.executor.approvals import ApprovalStatus, get_approval_store
 
     store = get_approval_store()
     req = store.request("kubectl delete pod p -n e2e", "kubectl", "destructive", "high")

@@ -1,0 +1,30 @@
+Kopilot has been deployed.
+
+1. Get the API endpoint:
+  {{- if eq .Values.service.type "ClusterIP" }}
+  kubectl port-forward svc/{{ include "kopilot.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+  {{- end }}
+
+2. Check agent health:
+  curl http://localhost:{{ .Values.service.port }}/health
+
+3. Submit a task:
+  curl -X POST http://localhost:{{ .Values.service.port }}/tasks \
+    -H "Content-Type: application/json" \
+    -d '{"prompt": "List all pods in default namespace"}'
+
+4. Create a task via CRD:
+  cat <<EOF | kubectl apply -f -
+  apiVersion: kopilot-ai.github.io/v1alpha1
+  kind: AITask
+  metadata:
+    name: my-task
+  spec:
+    prompt: "Check cluster health and report any issues"
+  EOF
+
+5. View skills:
+  curl http://localhost:{{ .Values.service.port }}/skills
+
+LLM provider: {{ .Values.llm.provider }} (model: {{ .Values.llm.model }})
+Enabled skills: {{ .Values.enabledSkills }}

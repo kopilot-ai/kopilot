@@ -1,6 +1,6 @@
 """Tests for skill loading and registry."""
 
-from kubedevaiops.skills.loader import BUILTIN_DIR, discover_skills
+from kopilot.skills.loader import BUILTIN_DIR, discover_skills
 
 
 def test_builtin_yaml_files_exist():
@@ -28,9 +28,9 @@ def test_skill_definitions_have_prompts():
 def test_registry_register_and_unregister(monkeypatch):
     from unittest.mock import MagicMock
 
-    from kubedevaiops.skills import base as skills_base
-    from kubedevaiops.skills.base import SkillRegistry
-    from kubedevaiops.skills.loader import SkillDefinition
+    from kopilot.skills import base as skills_base
+    from kopilot.skills.base import SkillRegistry
+    from kopilot.skills.loader import SkillDefinition
 
     agent = MagicMock()
     monkeypatch.setattr(skills_base, "build_subagent", lambda **_: agent)

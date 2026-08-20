@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 
-from kubedevaiops.executor.approvals import (
+from kopilot.executor.approvals import (
     ApprovalStatus,
     ApprovalStore,
 )
