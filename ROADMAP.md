@@ -1,29 +1,33 @@
 # Kopilot Roadmap
 
-This roadmap focuses on the public Kopilot product surface, not the historical
-internal package naming.
+The direction: a platform pilot you promote as trust grows. Autonomy is a
+dial the operator controls, never a default the tool assumes, and every
+autonomous action stays on the same audit trail as human approvals.
 
-## Current Focus
+## Now (0.3.x)
 
-- Public `kopilot` CLI and consistent onboarding
-- Cost-optimization proof assets and trust-first README/site updates
-- Safer GitHub project surfaces: roadmap, changelog, structured issue intake
+- The autonomy dial in production shape: observe / copilot / autopilot,
+  driven by AIPolicy CRDs, with the emergency brake documented and tested
+- One-command client install: OCI Helm chart and versioned images on ghcr
+- Durable approval queue (SQLite) so restarts lose nothing
 
-## Next Up
+## Next
 
-- Proof-backed cost optimization examples with reproducible prompts
-- MCP-era interoperability work for external tools and agent ecosystems
-- Better public trust surfaces for approvals, audit logs, and self-hosting
+- Autonomy reporting: what ran on autopilot, where, and what it would have
+  asked for at level 1, so teams can promote namespaces with evidence
+- Scheduled tasks (AITask cron) for recurring cost and hygiene sweeps
+- PyPI publication and a versioned container SBOM
 
-## After That
+## Later
 
-- Broader positioning beyond cost optimization into incident triage and
-  security workflows
-- Breaking rename plan for package, metrics, and CRD groups where justified
-- Enterprise support surfaces and design-partner onboarding
+- Multi-replica coordination for the approval queue and event watcher
+- Autonomy levels per skill (cost cleanup on autopilot, security read-only)
+- CNCF Sandbox donation: governance and license are already aligned;
+  submission tracked in the repo issues
 
-## Not In The Immediate Window
+## Not planned
 
-- Full framework rewrite of the static site
-- Breaking changes to Kubernetes API groups without a migration path
-- Hosted control plane work before trust and proof fundamentals are in place
+- A hosted control plane. Kopilot stays self-hosted; your cluster, your
+  keys, your audit log.
+- Vendor-exclusive LLM features. Everything must work against the
+  self-hosted Ollama path.

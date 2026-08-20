@@ -39,7 +39,7 @@ EXPOSE 8080
 LABEL org.opencontainers.image.title="Kopilot" \
       org.opencontainers.image.description="Approval-gated AI Kubernetes operations agent" \
       org.opencontainers.image.source="https://github.com/kopilot-ai/kopilot" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.licenses="Apache-2.0"
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import httpx; r=httpx.get('http://localhost:8080/health'); assert r.status_code==200"
