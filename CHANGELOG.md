@@ -5,10 +5,23 @@ All notable changes to Kopilot will be documented in this file.
 The format loosely follows Keep a Changelog and is intended to become the
 release companion for future tags and GitHub releases.
 
-## [Unreleased]
+## [0.3.0] - 2026-08-20
 
 ### Added
 
+- **The autonomy dial**: a three-level autonomy engine at the executor.
+  Level 0 refuses every mutation (an AIPolicy with `autonomyLevel: 0` is a
+  kubectl-applyable emergency brake), level 1 keeps approval-gated copilot,
+  level 2 grants namespace-scoped autopilot. Autopilot acts only when the
+  command names its namespaces explicitly and they all sit inside a grant;
+  CRITICAL commands, opaque payloads, and shell are never auto-approved.
+  Autonomous executions land in the approval ledger as `policy:<name>`.
+  Configure via `AUTONOMY_LEVEL`/`AUTONOMY_AUTOPILOT_NAMESPACES` or live
+  AIPolicy CRDs; `GET /autonomy` reports the effective state.
+- **What you sign is what runs**: approving a request executes the exact
+  reviewed command immediately and returns its output. Live testing showed
+  the consume-on-retry flow rarely completes because the LLM rewrites the
+  command on the next task; `?execute=false` keeps the old flow.
 - **Durable approvals**: `APPROVALS_DB_PATH` journals every approval
   transition to SQLite and reloads state on startup, so pending approvals
   survive a restart. Unset keeps the previous memory-only behavior. The Helm
@@ -24,6 +37,25 @@ release companion for future tags and GitHub releases.
   `oci://ghcr.io/kopilot-ai/charts/kubedevaiops`, so clients install without
   cloning the repo. Container images gain semver tags (`0.3.0`, `0.3`)
   and the chart's default image tag follows its appVersion.
+- Governance for a CNCF-track project: Apache-2.0 relicense (from MIT),
+  CNCF code of conduct, contributing guide with DCO, maintainers, security
+  policy, governance, adopters.
+
+### Fixed
+
+- The image declared a non-numeric user, so any install with the chart's
+  `runAsNonRoot` failed with CreateContainerConfigError; the user is now
+  UID 10001 and the pod sets `fsGroup` so `/data` is writable.
+- kubectl/helm downloads in the image were hardcoded to amd64; arm64 builds
+  shipped emulated binaries that crash with a Go lfstack runtime error on
+  the first command. Downloads follow TARGETARCH, kubectl moves to v1.33.4,
+  and releases publish linux/amd64 and linux/arm64.
+- The chart's Service rendered a metrics port with value 0, which made every
+  `helm install` fail; the metrics port block is gone (`/metrics` is on the
+  API port).
+- The chart's ClusterRole was missing `customresourcedefinitions` read
+  (kopf crashes at startup without it) and the `*/scale` subresources
+  (`kubectl scale` was Forbidden in-cluster).
 
 ### Security
 
