@@ -79,6 +79,14 @@ safety:
   # Directories read_resource() may read files from (JSON list)
   readPaths: '["/etc/kubedevaiops"]'
 
+# Autonomy dial: 0 = observe (mutations refused), 1 = copilot
+# (approval-gated, default), 2 = autopilot inside autopilotNamespaces.
+# AIPolicy CRDs adjust this at runtime without a redeploy.
+autonomy:
+  level: "1"
+  # JSON list, e.g. '["staging","qa"]' — required when level is 2
+  autopilotNamespaces: "[]"
+
 # Built-in skills to enable (loaded from YAML definitions at startup)
 enabledSkills: '["security","administration","networking","monitoring","troubleshooting","cost_optimization"]'
 

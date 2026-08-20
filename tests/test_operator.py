@@ -275,3 +275,83 @@ async def test_aiskill_register_failure_sets_failed():
         )
 
     assert patch_obj.status["phase"] == "Failed"
+
+
+# ── AIPolicy → autonomy engine ───────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_aipolicy_autopilot_grant():
+    from kubedevaiops.executor.autonomy import get_engine
+    from kubedevaiops.operator.handlers import on_aipolicy_create
+
+    patch_obj = MockPatch()
+    await on_aipolicy_create(
+        spec={"autonomyLevel": 2, "namespaces": ["staging", "qa"]},
+        name="staging-autopilot",
+        patch=patch_obj,
+        status={},
+    )
+    assert patch_obj.status["phase"] == "Active"
+    snap = get_engine().snapshot()
+    assert {"name": "staging-autopilot", "namespaces": ["staging", "qa"]} in snap["grants"]
+
+
+@pytest.mark.asyncio
+async def test_aipolicy_brake():
+    from kubedevaiops.executor.autonomy import get_engine
+    from kubedevaiops.operator.handlers import on_aipolicy_create, on_aipolicy_delete
+
+    patch_obj = MockPatch()
+    await on_aipolicy_create(
+        spec={"autonomyLevel": 0}, name="emergency-stop", patch=patch_obj, status={}
+    )
+    assert get_engine().snapshot()["observe"] is True
+    assert patch_obj.status["phase"] == "Active"
+
+    await on_aipolicy_delete(spec={"autonomyLevel": 0}, name="emergency-stop")
+    assert get_engine().snapshot()["observe"] is False
+
+
+@pytest.mark.asyncio
+async def test_aipolicy_autopilot_without_namespaces_is_invalid():
+    from kubedevaiops.executor.autonomy import get_engine
+    from kubedevaiops.operator.handlers import on_aipolicy_create
+
+    patch_obj = MockPatch()
+    await on_aipolicy_create(
+        spec={"autonomyLevel": 2}, name="bad-policy", patch=patch_obj, status={}
+    )
+    assert patch_obj.status["phase"] == "Invalid"
+    assert get_engine().snapshot()["grants"] == []
+
+
+@pytest.mark.asyncio
+async def test_aipolicy_update_to_copilot_removes_grant():
+    from kubedevaiops.executor.autonomy import get_engine
+    from kubedevaiops.operator.handlers import on_aipolicy_create, on_aipolicy_update
+
+    patch_obj = MockPatch()
+    await on_aipolicy_create(
+        spec={"autonomyLevel": 2, "namespaces": ["staging"]},
+        name="p1", patch=patch_obj, status={},
+    )
+    assert get_engine().snapshot()["grants"]
+
+    patch_obj2 = MockPatch()
+    await on_aipolicy_update(spec={"autonomyLevel": 1}, name="p1", patch=patch_obj2, status={})
+    assert get_engine().snapshot()["grants"] == []
+
+
+@pytest.mark.asyncio
+async def test_aipolicy_delete_removes_grant():
+    from kubedevaiops.executor.autonomy import get_engine
+    from kubedevaiops.operator.handlers import on_aipolicy_create, on_aipolicy_delete
+
+    patch_obj = MockPatch()
+    await on_aipolicy_create(
+        spec={"autonomyLevel": 2, "namespaces": ["staging"]},
+        name="p2", patch=patch_obj, status={},
+    )
+    await on_aipolicy_delete(spec={"autonomyLevel": 2, "namespaces": ["staging"]}, name="p2")
+    assert get_engine().snapshot()["grants"] == []

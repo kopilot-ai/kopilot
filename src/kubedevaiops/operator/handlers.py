@@ -248,25 +248,84 @@ async def on_aiskill_delete(name, **_):
 # ── AIPolicy ────────────────────────────────────────────────────────────────
 
 
+def _apply_aipolicy(spec, name, patch, status) -> None:
+    """Reconcile an AIPolicy into the autonomy engine.
+
+    ``autonomyLevel: 0`` engages a cluster-wide emergency brake, ``2`` grants
+    namespace-scoped autopilot, ``1`` (or absent) is explicit copilot and
+    clears any prior grant or brake from this policy.
+    """
+    from kubedevaiops.executor.autonomy import AutopilotGrant, get_engine
+
+    engine = get_engine()
+    level = int(spec.get("autonomyLevel", 1))
+    namespaces = list(spec.get("namespaces") or [])
+    existing = (status or {}).get("conditions")
+
+    # Reconcile from a clean slate for this policy name.
+    engine.remove_grant(name)
+    engine.clear_brake(name)
+
+    if level == 0:
+        engine.set_brake(name)
+        patch.status["phase"] = "Active"
+        _set_condition(
+            patch, "Ready", "True", "BrakeEngaged",
+            f"Policy '{name}' holds the emergency brake: all mutations are refused",
+            existing_conditions=existing,
+        )
+        log_event("operator.aipolicy.brake", name=name)
+        return
+
+    if level >= 2:
+        if not namespaces:
+            patch.status["phase"] = "Invalid"
+            _set_condition(
+                patch, "Ready", "False", "Invalid",
+                "autonomyLevel 2 requires spec.namespaces to scope the autopilot",
+                existing_conditions=existing,
+            )
+            log_event("operator.aipolicy.invalid", name=name)
+            return
+        engine.set_grant(AutopilotGrant(name=name, namespaces=namespaces))
+        patch.status["phase"] = "Active"
+        _set_condition(
+            patch, "Ready", "True", "AutopilotGranted",
+            f"Policy '{name}' grants autopilot in: {', '.join(namespaces)}",
+            existing_conditions=existing,
+        )
+        log_event("operator.aipolicy.autopilot", name=name, namespaces=namespaces)
+        return
+
+    patch.status["phase"] = "Active"
+    _set_condition(
+        patch, "Ready", "True", "Copilot",
+        f"Policy '{name}' keeps approval-gated copilot behavior",
+        existing_conditions=existing,
+    )
+    log_event("operator.aipolicy.loaded", name=name)
+
+
 @kopf.on.create(GROUP, VERSION, "aipolicies")
 async def on_aipolicy_create(spec, name, patch, status, **_):
     """Register an AI policy."""
     logger.info("operator.aipolicy.created", policy=name)
-    patch.status["phase"] = "Active"
-    _set_condition(
-        patch, "Ready", "True", "Active", f"Policy '{name}' is active",
-        existing_conditions=(status or {}).get("conditions"),
-    )
-    log_event("operator.aipolicy.loaded", name=name)
+    _apply_aipolicy(spec, name, patch, status)
 
 
 @kopf.on.update(GROUP, VERSION, "aipolicies", field="spec")
 async def on_aipolicy_update(spec, name, patch, status, **_):
     """Handle policy updates."""
     logger.info("operator.aipolicy.updated", policy=name)
-    patch.status["phase"] = "Active"
-    _set_condition(
-        patch, "Ready", "True", "Updated", f"Policy '{name}' updated",
-        existing_conditions=(status or {}).get("conditions"),
-    )
-    log_event("operator.aipolicy.updated", name=name)
+    _apply_aipolicy(spec, name, patch, status)
+
+
+@kopf.on.delete(GROUP, VERSION, "aipolicies")
+async def on_aipolicy_delete(name, **_):
+    """Release any grant or brake this policy held."""
+    from kubedevaiops.executor.autonomy import get_engine
+
+    engine = get_engine()
+    engine.remove_grant(name)
+    engine.clear_brake(name)
+    log_event("operator.aipolicy.deleted", name=name)
