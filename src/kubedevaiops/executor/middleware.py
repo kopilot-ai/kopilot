@@ -293,6 +293,20 @@ async def _guarded_run(command: str, tool_name: str) -> str:
         return f"ERROR: {e}"
 
 
+async def execute_approved(req) -> str:
+    """Run the exact command a human just approved, with full audit."""
+    log_event(
+        "executor.approved_via_api",
+        command=req.command[:200],
+        approval_id=req.id,
+        by=req.decided_by,
+    )
+    try:
+        return await _exec(req.command)
+    except CommandTimeoutError as e:
+        return f"ERROR: {e}"
+
+
 @tool
 async def run_kubectl(command: str) -> str:
     """Run any kubectl command against the cluster.
