@@ -1,22 +1,24 @@
 FROM python:3.13-slim AS base
 
-ARG KUBECTL_VERSION=v1.31.4
+ARG KUBECTL_VERSION=v1.33.4
 ARG HELM_VERSION=v3.16.4
+ARG TARGETARCH
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         curl ca-certificates && \
-    curl -fsSLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" && \
-    curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256" \
+    ARCH="${TARGETARCH:-$(dpkg --print-architecture)}" && \
+    curl -fsSLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl" && \
+    curl -fsSL "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl.sha256" \
         -o kubectl.sha256 && \
     echo "$(cat kubectl.sha256)  kubectl" | sha256sum -c - && \
     install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && \
-    curl -fsSLO "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" && \
-    curl -fsSLO "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz.sha256sum" && \
-    sha256sum -c "helm-${HELM_VERSION}-linux-amd64.tar.gz.sha256sum" && \
-    tar -xzf "helm-${HELM_VERSION}-linux-amd64.tar.gz" && \
-    install -o root -g root -m 0755 linux-amd64/helm /usr/local/bin/helm && \
+    curl -fsSLO "https://get.helm.sh/helm-${HELM_VERSION}-linux-${ARCH}.tar.gz" && \
+    curl -fsSLO "https://get.helm.sh/helm-${HELM_VERSION}-linux-${ARCH}.tar.gz.sha256sum" && \
+    sha256sum -c "helm-${HELM_VERSION}-linux-${ARCH}.tar.gz.sha256sum" && \
+    tar -xzf "helm-${HELM_VERSION}-linux-${ARCH}.tar.gz" && \
+    install -o root -g root -m 0755 "linux-${ARCH}/helm" /usr/local/bin/helm && \
     apt-get purge -y --auto-remove curl && \
-    rm -rf /var/lib/apt/lists/* kubectl kubectl.sha256 helm-* linux-amd64
+    rm -rf /var/lib/apt/lists/* kubectl kubectl.sha256 helm-* "linux-${ARCH}"
 
 RUN groupadd -r -g 10001 kubedevaiops && \
     useradd -r -u 10001 -g kubedevaiops -d /home/kubedevaiops -m kubedevaiops
