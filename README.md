@@ -1,16 +1,19 @@
 # Kopilot
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
-![License MIT](https://img.shields.io/badge/license-MIT-10B981)
+![License Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-10B981)
 ![Approval Gated](https://img.shields.io/badge/cluster_changes-approval--gated-F59E0B)
 ![Self Hosted](https://img.shields.io/badge/deployment-self--hosted-111827)
 
-**Find wasted Kubernetes spend before it lands on the bill.**
+**The platform pilot for Kubernetes. It investigates on its own, asks before
+it acts, and takes the controls only where you grant them.**
 
-Kopilot is an approval-gated AI operator for Kubernetes teams. It investigates
-over-provisioned workloads, idle resources, and orphaned storage from one
-prompt, explains the evidence in plain English, and recommends the next safe
-action.
+Kopilot is a self-hosted AI operator with an autonomy dial. Out of the box it
+runs as a copilot: it investigates incidents, cost waste, security posture,
+and networking with real kubectl and helm commands, and every destructive
+action waits for a human approval. When a namespace has earned your trust,
+an AIPolicy grants autopilot there, and Kopilot acts on its own, on the same
+audit trail. A second AIPolicy is the emergency brake.
 
 > Naming note: the Python package and Kubernetes API group are `kubedevaiops`;
 > the CLI is available as both `kopilot` and `kubedevaiops`.
@@ -36,16 +39,40 @@ What the first run should give you:
 - Rightsizing and cleanup recommendations, with destructive follow-up left
   behind approval gates
 
+## The Autonomy Dial
+
+| Level | Name | What it means |
+|---|---|---|
+| 0 | Observe | Every mutating command is refused. Applying an AIPolicy with `autonomyLevel: 0` is a cluster-wide emergency brake you can `kubectl apply` in an incident. |
+| 1 | Copilot | The default. Investigations run freely; destructive commands create a pending approval a human decides. |
+| 2 | Autopilot | Namespace-scoped grants. Kopilot executes gated commands on its own only when every namespace the command names sits inside a grant. CRITICAL commands, opaque payloads (`kubectl exec/cp/attach`), and shell commands are never auto-approved; protected namespaces stay refused. |
+
+```yaml
+apiVersion: kubedevaiops.io/v1alpha1
+kind: AIPolicy
+metadata:
+  name: staging-autopilot
+spec:
+  autonomyLevel: 2
+  namespaces: [staging, qa]
+```
+
+Every autonomous action is recorded in the same approval queue humans use,
+as a consumed request decided by `policy:staging-autopilot`. One audit
+trail, whoever pulled the trigger. `GET /autonomy` reports the effective
+state at any moment.
+
 ## Safety Model
 
 - **Read-first by default**: investigations start with `get`, `describe`,
   `logs`, and metrics collection before any mutation is considered.
 - **Approval-gated changes**: destructive actions (deletes, drains, cordons,
   taints, patches, scales, `helm uninstall`/`rollback`) are never executed
-  directly. The executor registers a pending approval request; a human reviews
-  it via `GET /approvals` and decides with
-  `POST /approvals/{id}/approve` or `/deny`. Approvals are single-use and
-  expire after 10 minutes.
+  directly outside an autopilot grant. The executor registers a pending
+  approval request; a human reviews it via `GET /approvals` and decides with
+  `POST /approvals/{id}/approve` or `/deny`. Approvals are single-use, expire
+  after 10 minutes, and survive restarts when `APPROVALS_DB_PATH` is set
+  (the Helm chart sets it by default).
 - **Protected namespaces**: destructive actions on `kube-system`,
   `kube-public`, and `kube-node-lease` (configurable) are refused outright and
   cannot be approved.
@@ -92,7 +119,8 @@ Current skill model:
 
 - **Built-in YAML skills** ship with the package
 - **Mounted YAML skills** can be loaded through `SKILL_DIRS`
-- **AISkill CRDs** are the planned next source and will map to the same portable manifest shape
+- **AISkill CRDs** register live sub-agents in serve mode: apply a resource
+  with a `systemPrompt` and it appears in `/skills` without a restart
 
 Agent-to-agent note:
 
@@ -113,7 +141,7 @@ Agent-to-agent note:
 3. **Dynamic skill loading** — Skills are loaded from:
    - Built-in YAML files shipped with the package
    - Extra directories (e.g. ConfigMap volumes in K8s)
-   - AISkill CRDs applied to the cluster (planned)
+   - AISkill CRDs applied to the cluster (live, in serve mode)
 
 4. **Supervisor pattern** — A coordinator agent routes user requests to the
    best sub-agent(s), allowing multi-domain tasks via parallel delegation.
@@ -214,6 +242,21 @@ Set `SKILL_DIRS=/path/to/extra/skills` or mount a ConfigMap.
 
 ## Quick Start
 
+### Install on a cluster (Helm, one command)
+
+```bash
+helm install kopilot oci://ghcr.io/kopilot-ai/charts/kubedevaiops \
+  --version 0.3.0 --namespace kopilot --create-namespace \
+  --set llm.provider=gemini \
+  --set gemini.apiKey=$GEMINI_API_KEY \
+  --set api.authToken=$(openssl rand -hex 16)
+```
+
+Point `llm.provider` at `ollama` for a fully self-hosted stack. The chart
+ships CRDs, RBAC, the approval volume, and sane security contexts.
+
+### Run from source
+
 ### Prerequisites
 
 - Python 3.11+ (tested on 3.13)
@@ -283,11 +326,14 @@ All settings via environment variables or `.env` file:
 | `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model name |
 | `ANTHROPIC_API_KEY` | (empty) | Anthropic API key |
 | `ANTHROPIC_MODEL` | `claude-opus-5` | Anthropic model name |
-| `API_AUTH_TOKEN` | (empty) | Bearer token for `/tasks`, `/tasks/history`, `/metrics`, `/approvals` |
+| `API_AUTH_TOKEN` | (empty) | Bearer token for `/tasks`, `/tasks/history`, `/metrics`, `/approvals`, `/autonomy` |
 | `API_WEBHOOK_SECRET` | (empty) | HMAC secret for `/webhook` (disabled when unset) |
 | `API_CORS_ORIGINS` | `[]` | CORS origin allowlist (empty = disabled) |
 | `SAFETY_PROTECTED_NAMESPACES` | `kube-system,...` | JSON list |
 | `SAFETY_REQUIRE_APPROVAL_DESTRUCTIVE` | `true` | Gate destructive ops behind human approval |
+| `AUTONOMY_LEVEL` | `1` | 0 observe, 1 copilot, 2 autopilot in the namespaces below |
+| `AUTONOMY_AUTOPILOT_NAMESPACES` | `[]` | Namespaces the env-level autopilot grant covers |
+| `APPROVALS_DB_PATH` | (empty) | SQLite file for the approval queue; set for restart-durable approvals |
 | `SAFETY_MAX_CONCURRENT_TASKS` | `5` | Concurrent task limit |
 | `SAFETY_READ_PATHS` | `["/etc/kubedevaiops"]` | Directories `read_resource` may read |
 | `SLACK_ALLOWED_USERS` | `[]` | Slack user IDs allowed to run tasks |
@@ -339,6 +385,7 @@ spec:
 | `/approvals` | GET | bearer | List approval requests (`?status=pending`) |
 | `/approvals/{id}/approve` | POST | bearer | Approve a gated command (single-use, 10 min TTL) |
 | `/approvals/{id}/deny` | POST | bearer | Deny a gated command |
+| `/autonomy` | GET | bearer | Effective autonomy state: level, brakes, grants |
 | `/webhook` | POST | HMAC | Webhook handler (X-Kopilot-Signature, sha256) |
 | `/metrics` | GET | bearer | Prometheus-compatible metrics |
 
@@ -431,4 +478,4 @@ tests/
 
 ## License
 
-MIT
+Apache-2.0
