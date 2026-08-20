@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 132" role="img" aria-label="Kopilot">
+<text x="0" y="96" font-family="Space Grotesk, Inter, system-ui, sans-serif" font-weight="700" font-size="120" letter-spacing="-3" fill="#F4F1EA">k</text>
+<line x1="103.75" y1="29.3" x2="94.92" y2="24.2" stroke="#F4F1EA" stroke-width="7.8" stroke-linecap="round"/>
+<line x1="150.0" y1="2.6" x2="150.0" y2="-7.6" stroke="#F4F1EA" stroke-width="7.8" stroke-linecap="round"/>
+<line x1="196.25" y1="29.3" x2="205.08" y2="24.2" stroke="#F4F1EA" stroke-width="7.8" stroke-linecap="round"/>
+<circle cx="150" cy="56" r="45.0" fill="#F4F1EA"/>
+<line x1="158.83" y1="50.9" x2="180.66" y2="38.3" stroke="#FF4F1F" stroke-width="10.2" stroke-linecap="round"/>
+<text x="218" y="96" font-family="Space Grotesk, Inter, system-ui, sans-serif" font-weight="700" font-size="120" letter-spacing="-3" fill="#F4F1EA">pilot</text>
+</svg>
