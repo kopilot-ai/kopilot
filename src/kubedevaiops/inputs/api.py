@@ -274,12 +274,27 @@ def create_app(with_event_watcher: bool = False) -> FastAPI:
         return [r.to_dict() for r in store.list(parsed)]
 
     @app.post("/approvals/{approval_id}/approve", dependencies=[Depends(_require_auth)])
-    async def approve(approval_id: str, request: Request):
+    async def approve(approval_id: str, request: Request, execute: bool = True):
+        """Approve a gated command.
+
+        What you sign is what runs: by default the exact reviewed command is
+        executed immediately and its output returned, so no LLM gets a chance
+        to rephrase it. Pass ``?execute=false`` to leave a standing single-use
+        approval for the agent to consume instead.
+        """
+        store = get_approval_store()
         by = request.headers.get("x-kopilot-operator", "api")
-        req = get_approval_store().approve(approval_id, decided_by=by)
+        req = store.approve(approval_id, decided_by=by)
         if req is None:
             raise HTTPException(status_code=404, detail="No pending approval with that id")
-        return req.to_dict()
+        if not execute:
+            return {**req.to_dict(), "executed": False}
+
+        from kubedevaiops.executor.middleware import execute_approved
+
+        consumed = store.consume_if_approved(req.command)
+        output = await execute_approved(consumed or req)
+        return {**store.get(req.id).to_dict(), "executed": True, "output": output}
 
     @app.post("/approvals/{approval_id}/deny", dependencies=[Depends(_require_auth)])
     async def deny(approval_id: str, request: Request):

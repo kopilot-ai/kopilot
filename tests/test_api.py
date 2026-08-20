@@ -217,7 +217,7 @@ def test_webhook_missing_prompt(webhook_client):
 # ── Approvals API ───────────────────────────────────────────────────────────
 
 
-def test_approvals_flow(client):
+def test_approvals_flow(client, mock_subprocess):
     from kubedevaiops.executor.approvals import get_approval_store
 
     store = get_approval_store()
@@ -229,9 +229,11 @@ def test_approvals_flow(client):
     listed = client.get("/approvals").json()
     assert any(item["id"] == req.id for item in listed)
 
+    # Default approve executes the signed command and consumes the approval
     resp = client.post(f"/approvals/{req.id}/approve")
     assert resp.status_code == 200
-    assert resp.json()["status"] == "approved"
+    assert resp.json()["status"] == "consumed"
+    assert resp.json()["executed"] is True
 
     # A second decision on the same id is a 404 (no longer pending)
     assert client.post(f"/approvals/{req.id}/deny").status_code == 404
@@ -264,3 +266,39 @@ def test_autonomy_endpoint_snapshot(auth_client, autonomy_staging):
     body = r.json()
     assert body["observe"] is False
     assert body["grants"] == [{"name": "staging-autopilot", "namespaces": ["staging"]}]
+
+
+def test_approve_executes_the_signed_command(auth_client, mock_subprocess):
+    """Approving runs the exact reviewed command and returns its output."""
+    from kubedevaiops.executor.approvals import get_approval_store
+
+    req = get_approval_store().request(
+        "kubectl scale deployment sleeper -n e2e --replicas=1",
+        "kubectl", "destructive", "high",
+    )
+    r = auth_client.post(
+        f"/approvals/{req.id}/approve",
+        headers={"Authorization": "Bearer sekrit-token"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "consumed"
+    assert body["executed"] is True
+    assert "mocked output" in body["output"]
+
+
+def test_approve_without_execute_keeps_old_flow(auth_client, mock_subprocess):
+    from kubedevaiops.executor.approvals import ApprovalStatus, get_approval_store
+
+    store = get_approval_store()
+    req = store.request("kubectl delete pod p -n e2e", "kubectl", "destructive", "high")
+    r = auth_client.post(
+        f"/approvals/{req.id}/approve?execute=false",
+        headers={"Authorization": "Bearer sekrit-token"},
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "approved"
+    assert r.json()["executed"] is False
+    # the standing approval is consumable by the agent as before
+    assert store.consume_if_approved("kubectl delete pod p -n e2e") is not None
+    assert store.get(req.id).status is ApprovalStatus.CONSUMED
