@@ -8,6 +8,8 @@
 **The platform pilot for Kubernetes. It investigates on its own, asks before
 it acts, and takes the controls only where you grant them.**
 
+Site and docs: https://kopilot-roan.vercel.app
+
 Kopilot is a self-hosted AI operator with an autonomy dial. Out of the box it
 runs as a copilot: it investigates incidents, cost waste, security posture,
 and networking with real kubectl and helm commands, and every destructive
