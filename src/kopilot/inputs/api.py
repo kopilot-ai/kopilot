@@ -78,6 +78,23 @@ def _require_auth(request: Request) -> None:
         raise HTTPException(status_code=401, detail="Invalid or missing bearer token")
 
 
+def _principal(request: Request) -> str:
+    """The authenticated identity behind a request.
+
+    Today that is the bearer credential, recorded as a fingerprint so the
+    ledger names the credential without ever storing it.  When auth is
+    disabled the request carries no identity and says so.  A client-supplied
+    name (``x-kopilot-operator``) never reaches this function: it is display
+    only, and anyone can send any value.
+    """
+    token = get_settings().api.auth_token
+    if not token:
+        return "unauthenticated"
+    header = request.headers.get("authorization", "")
+    provided = header[7:] if header.startswith("Bearer ") else ""
+    return f"token:{hashlib.sha256(provided.encode()).hexdigest()[:12]}"
+
+
 def _acquire_task_slot() -> bool:
     global _concurrent_tasks  # noqa: PLW0603
     limit = get_settings().safety.max_concurrent_tasks
@@ -281,10 +298,17 @@ def create_app(with_event_watcher: bool = False) -> FastAPI:
         executed immediately and its output returned, so no LLM gets a chance
         to rephrase it. Pass ``?execute=false`` to leave a standing single-use
         approval for the agent to consume instead.
+
+        The approver of record is the authenticated principal. Safety and the
+        autonomy brake are re-evaluated at execution time, so an approval can
+        be spent on a refusal; ``executed`` says which happened.
         """
         store = get_approval_store()
-        by = request.headers.get("x-kopilot-operator", "api")
-        req = store.approve(approval_id, decided_by=by)
+        req = store.approve(
+            approval_id,
+            decided_by=_principal(request),
+            operator_display=request.headers.get("x-kopilot-operator", ""),
+        )
         if req is None:
             raise HTTPException(status_code=404, detail="No pending approval with that id")
         if not execute:
@@ -293,13 +317,17 @@ def create_app(with_event_watcher: bool = False) -> FastAPI:
         from kopilot.executor.middleware import execute_approved
 
         consumed = store.consume_if_approved(req.command)
-        output = await execute_approved(consumed or req)
-        return {**store.get(req.id).to_dict(), "executed": True, "output": output}
+        outcome = await execute_approved(consumed or req)
+        current = store.get(req.id) or consumed or req
+        return {**current.to_dict(), "executed": outcome.executed, "output": outcome.output}
 
     @app.post("/approvals/{approval_id}/deny", dependencies=[Depends(_require_auth)])
     async def deny(approval_id: str, request: Request):
-        by = request.headers.get("x-kopilot-operator", "api")
-        req = get_approval_store().deny(approval_id, decided_by=by)
+        req = get_approval_store().deny(
+            approval_id,
+            decided_by=_principal(request),
+            operator_display=request.headers.get("x-kopilot-operator", ""),
+        )
         if req is None:
             raise HTTPException(status_code=404, detail="No pending approval with that id")
         return req.to_dict()

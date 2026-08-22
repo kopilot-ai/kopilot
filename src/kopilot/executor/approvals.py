@@ -9,7 +9,17 @@ the approval TTL, after which the approval is consumed.
 The store is process-local and scoped to a single replica.  With a
 ``db_path`` (``APPROVALS_DB_PATH``) every transition is journaled to SQLite
 and reloaded on startup, so approvals survive a restart; without one the
-store is memory-only.  Every transition is written to the audit log.
+store is memory-only.
+
+SQLite is the *working queue*, not the history: settled requests are dropped
+from it once they are past the retention window so a long-lived process does
+not grow one row per command.  Every transition, and the full record of any
+request about to be dropped, is written first to the hash-chained ledger,
+which is append-only and which the cleanup never touches.
+
+``decided_by`` is the authenticated principal.  ``operator_display`` is a
+self-asserted name a client may claim for readability; it is advisory and
+must never be read as identity.
 """
 
 from __future__ import annotations
@@ -25,7 +35,15 @@ from pathlib import Path
 import structlog
 
 from kopilot.agent.safety import normalize_command as _normalize
-from kopilot.outputs.audit import log_event
+from kopilot.outputs.audit import (
+    AUTHORITY_NONE,
+    Decision,
+    advisory_display,
+    authority_for,
+    log_event,
+    record_command_event,
+    redact_command,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -52,6 +70,7 @@ class ApprovalRequest:
     created_at: float = field(default_factory=time.time)
     decided_at: float | None = None
     decided_by: str = ""
+    operator_display: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -63,7 +82,22 @@ class ApprovalRequest:
             "status": self.status.value,
             "created_at": self.created_at,
             "decided_at": self.decided_at,
+            # The authenticated principal that decided this request.
             "decided_by": self.decided_by,
+            # A name the client claimed for itself: display only, never identity.
+            "operator_display": self.operator_display,
+            "operator_display_advisory": True,
+        }
+
+    def ledger_context(self, stage: str, **extra) -> dict:
+        """Context block for a ledger envelope about this request."""
+        return {
+            "stage": stage,
+            "approval_id": self.id,
+            "risk": self.risk,
+            "tool": self.tool,
+            "operator_display": advisory_display(self.operator_display),
+            **extra,
         }
 
 
@@ -89,9 +123,15 @@ class ApprovalStore:
                     status TEXT NOT NULL,
                     created_at REAL NOT NULL,
                     decided_at REAL,
-                    decided_by TEXT NOT NULL DEFAULT ''
+                    decided_by TEXT NOT NULL DEFAULT '',
+                    operator_display TEXT NOT NULL DEFAULT ''
                 )"""
             )
+            columns = {row[1] for row in self._db.execute("PRAGMA table_info(approvals)")}
+            if "operator_display" not in columns:
+                self._db.execute(
+                    "ALTER TABLE approvals ADD COLUMN operator_display TEXT NOT NULL DEFAULT ''"
+                )
             self._db.commit()
             with self._lock:
                 self._load_locked()
@@ -101,7 +141,7 @@ class ApprovalStore:
         assert self._db is not None
         rows = self._db.execute(
             "SELECT id, command, tool, reason, risk, status, created_at, decided_at,"
-            " decided_by FROM approvals"
+            " decided_by, operator_display FROM approvals"
         ).fetchall()
         for row in rows:
             req = ApprovalRequest(
@@ -114,6 +154,7 @@ class ApprovalStore:
                 created_at=row[6],
                 decided_at=row[7],
                 decided_by=row[8],
+                operator_display=row[9],
             )
             self._requests[req.id] = req
         if rows:
@@ -124,9 +165,10 @@ class ApprovalStore:
             return
         self._db.execute(
             "INSERT INTO approvals (id, command, tool, reason, risk, status, created_at,"
-            " decided_at, decided_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            " decided_at, decided_by, operator_display) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             " ON CONFLICT(id) DO UPDATE SET status=excluded.status,"
-            " decided_at=excluded.decided_at, decided_by=excluded.decided_by",
+            " decided_at=excluded.decided_at, decided_by=excluded.decided_by,"
+            " operator_display=excluded.operator_display",
             (
                 req.id,
                 req.command,
@@ -137,6 +179,7 @@ class ApprovalStore:
                 req.created_at,
                 req.decided_at,
                 req.decided_by,
+                req.operator_display,
             ),
         )
         self._db.commit()
@@ -150,13 +193,22 @@ class ApprovalStore:
     def _expire_locked(self) -> None:
         now = time.time()
         # Settled requests are kept briefly for operator visibility, then
-        # dropped so a long-lived process does not grow one entry per command.
+        # dropped from the working queue so a long-lived process does not grow
+        # one entry per command. The record is written to the ledger first;
+        # only the queue forgets, the history never does.
         for key in [
             k for k, r in self._requests.items()
             if r.status is not ApprovalStatus.PENDING
             and now - (r.decided_at or r.created_at) > self._ttl * 4
         ]:
-            del self._requests[key]
+            retired = self._requests.pop(key)
+            record_command_event(
+                retired.command,
+                retired.tool,
+                Decision.OBSERVED,
+                authority_for(retired.decided_by),
+                context=retired.ledger_context("approval_retired", record=retired.to_dict()),
+            )
             self._delete_persisted_locked(key)
         for req in self._requests.values():
             expired_pending = (
@@ -170,6 +222,13 @@ class ApprovalStore:
             if expired_pending or expired_approval:
                 req.status = ApprovalStatus.EXPIRED
                 self._persist_locked(req)
+                record_command_event(
+                    req.command,
+                    req.tool,
+                    Decision.OBSERVED,
+                    AUTHORITY_NONE,
+                    context=req.ledger_context("approval_expired"),
+                )
 
     def request(self, command: str, tool: str, reason: str, risk: str) -> ApprovalRequest:
         """Register (or return the existing) pending request for a command."""
@@ -191,7 +250,19 @@ class ApprovalStore:
             req = ApprovalRequest(command=command, tool=tool, reason=reason, risk=risk)
             self._requests[req.id] = req
             self._persist_locked(req)
-            log_event("approval.requested", approval_id=req.id, command=command[:200], risk=risk)
+            log_event(
+                "approval.requested",
+                approval_id=req.id,
+                command=redact_command(command)[:200],
+                risk=risk,
+            )
+            record_command_event(
+                command,
+                tool,
+                Decision.OBSERVED,
+                AUTHORITY_NONE,
+                context=req.ledger_context("approval_requested", reason=reason),
+            )
             return req
 
     def get(self, approval_id: str) -> ApprovalRequest | None:
@@ -208,7 +279,11 @@ class ApprovalStore:
             return requests
 
     def _decide(
-        self, approval_id: str, status: ApprovalStatus, decided_by: str
+        self,
+        approval_id: str,
+        status: ApprovalStatus,
+        decided_by: str,
+        operator_display: str = "",
     ) -> ApprovalRequest | None:
         with self._lock:
             self._expire_locked()
@@ -218,19 +293,40 @@ class ApprovalStore:
             req.status = status
             req.decided_at = time.time()
             req.decided_by = decided_by
+            req.operator_display = operator_display
             self._persist_locked(req)
             return req
 
-    def approve(self, approval_id: str, decided_by: str = "api") -> ApprovalRequest | None:
-        req = self._decide(approval_id, ApprovalStatus.APPROVED, decided_by)
+    def approve(
+        self, approval_id: str, decided_by: str = "api", operator_display: str = ""
+    ) -> ApprovalRequest | None:
+        """Approve a request. ``decided_by`` is the authenticated principal."""
+        req = self._decide(approval_id, ApprovalStatus.APPROVED, decided_by, operator_display)
         if req:
             log_event("approval.approved", approval_id=approval_id, by=decided_by)
+            record_command_event(
+                req.command,
+                req.tool,
+                Decision.APPROVED,
+                authority_for(decided_by),
+                context=req.ledger_context("approval_granted", reason=req.reason),
+            )
         return req
 
-    def deny(self, approval_id: str, decided_by: str = "api") -> ApprovalRequest | None:
-        req = self._decide(approval_id, ApprovalStatus.DENIED, decided_by)
+    def deny(
+        self, approval_id: str, decided_by: str = "api", operator_display: str = ""
+    ) -> ApprovalRequest | None:
+        """Deny a request. ``decided_by`` is the authenticated principal."""
+        req = self._decide(approval_id, ApprovalStatus.DENIED, decided_by, operator_display)
         if req:
             log_event("approval.denied", approval_id=approval_id, by=decided_by)
+            record_command_event(
+                req.command,
+                req.tool,
+                Decision.DENIED,
+                authority_for(decided_by),
+                context=req.ledger_context("approval_denied", reason=req.reason),
+            )
         return req
 
     def record_auto(
@@ -253,9 +349,17 @@ class ApprovalStore:
         log_event(
             "approval.auto_approved",
             approval_id=req.id,
-            command=command[:200],
+            command=redact_command(command)[:200],
             risk=risk,
             policy=policy,
+        )
+        record_command_event(
+            command,
+            tool,
+            Decision.AUTOPILOTED,
+            f"policy:{policy}",
+            policy_ref=policy,
+            context=req.ledger_context("autopilot_granted", reason=reason),
         )
         return req
 
@@ -271,8 +375,15 @@ class ApprovalStore:
                     log_event(
                         "approval.consumed",
                         approval_id=req.id,
-                        command=command[:200],
+                        command=redact_command(command)[:200],
                         by=req.decided_by,
+                    )
+                    record_command_event(
+                        req.command,
+                        req.tool,
+                        Decision.APPROVED,
+                        authority_for(req.decided_by),
+                        context=req.ledger_context("approval_consumed"),
                     )
                     return req
         return None
