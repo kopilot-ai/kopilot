@@ -1,11 +1,12 @@
 # python:3.13-slim, digest-pinned; refresh with `docker buildx imagetools inspect python:3.13-slim`
 FROM python:3.13-slim@sha256:ffb752e139c0a19692a43af8d8523b274222dd68eebad5d583b45c2201c6e30a AS base
 
-ARG KUBECTL_VERSION=v1.33.4
-ARG HELM_VERSION=v3.16.4
+ARG KUBECTL_VERSION=v1.36.4
+ARG HELM_VERSION=v3.21.4
 ARG TARGETARCH
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get -y upgrade && \
+    apt-get install -y --no-install-recommends \
         curl ca-certificates && \
     ARCH="${TARGETARCH:-$(dpkg --print-architecture)}" && \
     curl -fsSLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${ARCH}/kubectl" && \
@@ -29,7 +30,7 @@ WORKDIR /app
 COPY requirements-lock.txt ./
 # The image's bundled pip mis-resolves the hash-locked set; 26.2.1 is the
 # resolver the lock was verified against.
-RUN pip install --no-cache-dir pip==26.2.1 && \
+RUN pip install --no-cache-dir pip==26.2.1 setuptools==84.0.0 && \
     pip install --no-cache-dir --require-hashes -r requirements-lock.txt
 
 COPY pyproject.toml README.md ./
