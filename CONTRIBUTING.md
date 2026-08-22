@@ -4,7 +4,7 @@
 
 ```bash
 git clone https://github.com/kopilot-ai/kopilot && cd kopilot
-python3.13 -m venv .venv && source .venv/bin/activate
+python3.11 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pytest tests/ --ignore=tests/test_integration_smoke.py   # fast, no external deps
 ```

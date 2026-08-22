@@ -4,7 +4,11 @@
 #   kubectl create configmap kopilot-custom-skills \
 #     --from-file=skills/deployment-runbook.yaml -n kopilot
 #
-# The chart mounts it at /etc/kopilot/skills and sets SKILL_DIRS.
+# The chart mounts it at /etc/kopilot/skills and sets SKILL_DIRS. That only
+# makes the file visible to the loader, which still checks each skill's name
+# against enabledSkills and silently drops anything not on the list. Add
+# this skill's name too:
+#   --set enabledSkills='["security","administration","networking","monitoring","troubleshooting","cost_optimization","deployment_runbook"]'
 apiVersion: v1
 kind: ConfigMap
 metadata:
