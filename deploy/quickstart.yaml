@@ -137,7 +137,7 @@ spec:
         - name: agent
           # Pinned, not :latest — a quickstart that silently changes what it
           # runs is not a quickstart.
-          image: ghcr.io/kopilot-ai/kopilot:0.4.0
+          image: ghcr.io/kopilot-ai/kopilot:0.5.0
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false

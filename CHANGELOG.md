@@ -5,6 +5,74 @@ All notable changes to Kopilot will be documented in this file.
 The format loosely follows Keep a Changelog and is intended to become the
 release companion for future tags and GitHub releases.
 
+## [0.5.0] - 2026-08-22
+
+The production-hardening release. An external review proved that the dial
+only gated destructive verbs: `kubectl apply -n kube-system`, a helm
+upgrade into a protected namespace, and `base64 -d | sh` all ran without
+approval, even with the emergency brake engaged. This release closes that
+and everything found around it.
+
+### Changed (breaking)
+
+- **Every mutation gates, not just destructive verbs.** The safety layer
+  is now a parser with allowlists of read-only verbs; anything else,
+  including any command it cannot parse (pipes to `sh`, variable
+  indirection, base64 payloads), waits for approval at level 1 and is
+  refused at level 0. Protected-namespace checks apply to every mutation
+  and match whole names. Reads still run free.
+- **RBAC ships least-privilege.** The ClusterRole loses cluster-wide
+  Secret reads and all write verbs on pods, serviceaccounts, namespaces,
+  and daemonsets. Deletions and pod creation sit behind
+  `rbac.extendedWrite`, Secret reads behind `rbac.extendedRead`. An
+  approved deletion on the default tier now gets a 403 from the API
+  server; that is the intended double lock.
+- **Auth is on by default.** The chart generates a per-release bearer
+  token (kept across upgrades) unless `api.authToken` or
+  `existingSecret` overrides it. The quickstart drops its NodePort for
+  ClusterIP plus port-forward.
+- **A namespaced AIPolicy stays in its namespace.** An `autonomyLevel: 2`
+  grant naming any other namespace is rejected `Invalid` with a
+  `NamespaceEscape` condition. The level-0 brake stays cluster-wide.
+- `AUTONOMY_LEVEL` is validated to 0-2; negative values used to disable
+  observe mode entirely.
+
+### Added
+
+- **A real audit ledger.** Hash-chained JSONL beside the approvals
+  database, one RFC 0001 envelope per authority decision: requests,
+  grants, denials, autopiloted runs, brake refusals, results. Full
+  64-char SHA-256 chain, fsync on every write, restart continues the
+  chain, `verify_chain` walks it. Settled approvals are retired into the
+  ledger before leaving the queue instead of being deleted. Approver
+  identity comes from the authenticated credential; the
+  `X-Kopilot-Operator` header is advisory display only. Approved
+  executions re-check safety and the brake at execution time.
+- **The operator survives restarts.** `@kopf.on.resume` handlers rebuild
+  the brake, autopilot grants, and skills from live CRs; an AITask caught
+  mid-`Executing` is marked Failed instead of being lost or re-run.
+- **Supply chain.** Publishing gates on tests and runs on tags only;
+  images ship with SBOM, provenance, and cosign keyless signatures;
+  dependencies are hash-locked; the base image and every action are
+  pinned; Trivy scans the image in CI; dependabot watches all three
+  ecosystems. The runtime image drops pip entirely.
+- `docs/UPGRADING.md`, an approval-loop walkthrough in the README and
+  chart NOTES, and RFC 0001 (`docs/rfc/0001-ledger-event-schema.md`),
+  the shared Gate/Govern/Meter event schema.
+
+Migration from 0.4.0:
+
+- CRDs are not upgraded by `helm upgrade`: run
+  `kubectl apply -f helm/kopilot/crds/` before upgrading.
+- Commands that previously ran unattended at level 1 (apply, create,
+  edit, rollout, helm install) now request approval. Autopilot at
+  level 2 within granted namespaces is unchanged.
+- If a workflow needs deletions or pod creation, set
+  `rbac.extendedWrite=true`.
+- Clients must send `Authorization: Bearer <token>`; the token is in the
+  release Secret.
+- Pending approvals do not migrate: decide them before upgrading.
+
 ## [0.4.0] - 2026-08-20
 
 ### Changed (breaking)

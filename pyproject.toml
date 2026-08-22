@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kopilot"
-version = "0.4.0"
+version = "0.5.0"
 description = "Kopilot is an autonomous AI-powered Kubernetes operations agent"
 readme = "README.md"
 license = {text = "Apache-2.0"}

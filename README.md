@@ -69,7 +69,7 @@ expire in 10 minutes, and journal to SQLite so they survive restarts.
 
 ```bash
 helm install kopilot oci://ghcr.io/kopilot-ai/charts/kopilot \
-  --version 0.4.0 --namespace kopilot --create-namespace \
+  --version 0.5.0 --namespace kopilot --create-namespace \
   --set llm.provider=ollama
 ```
 
@@ -82,7 +82,7 @@ already issued one:
 
 ```bash
 helm install kopilot oci://ghcr.io/kopilot-ai/charts/kopilot \
-  --version 0.4.0 --namespace kopilot --create-namespace \
+  --version 0.5.0 --namespace kopilot --create-namespace \
   --set llm.provider=ollama --set api.authToken=$(openssl rand -hex 24)
 ```
 
