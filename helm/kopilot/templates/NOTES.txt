@@ -5,15 +5,26 @@ Kopilot has been deployed.
   kubectl port-forward svc/{{ include "kopilot.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }} -n {{ .Release.Namespace }}
   {{- end }}
 
-2. Check agent health:
+2. Get the bearer token. The chart generates one per release unless you set
+   api.authToken yourself; either way it ends up in the release Secret:
+  export KOPILOT_TOKEN=$(kubectl get secret {{ include "kopilot.fullname" . }}-secrets -n {{ .Release.Namespace }} -o jsonpath='{.data.API_AUTH_TOKEN}' | base64 -d)
+
+3. Check agent health (no auth required):
   curl http://localhost:{{ .Values.service.port }}/health
 
-3. Submit a task:
+4. Submit a task:
   curl -X POST http://localhost:{{ .Values.service.port }}/tasks \
+    -H "Authorization: Bearer $KOPILOT_TOKEN" \
     -H "Content-Type: application/json" \
     -d '{"prompt": "List all pods in default namespace"}'
 
-4. Create a task via CRD:
+5. Review what it wants to run, then approve or deny it:
+  curl http://localhost:{{ .Values.service.port }}/approvals -H "Authorization: Bearer $KOPILOT_TOKEN"
+  curl -X POST http://localhost:{{ .Values.service.port }}/approvals/<id>/approve \
+    -H "Authorization: Bearer $KOPILOT_TOKEN" \
+    -H "X-Kopilot-Operator: <you>"
+
+6. Create a task via CRD:
   cat <<EOF | kubectl apply -f -
   apiVersion: kopilot-ai.github.io/v1alpha1
   kind: AITask
@@ -23,8 +34,15 @@ Kopilot has been deployed.
     prompt: "Check cluster health and report any issues"
   EOF
 
-5. View skills:
+7. View skills:
   curl http://localhost:{{ .Values.service.port }}/skills
+
+If no Secret key comes back in step 2 (an existingSecret without
+API_AUTH_TOKEN, or api.authToken left empty on a chart that predates
+auto-generation), the API runs with no auth at all: every endpoint above
+answers with no header, and the pod logs an "api.auth_disabled" warning on
+every start. Fine for a throwaway kind cluster; not for anything reachable
+by anyone else.
 
 LLM provider: {{ .Values.llm.provider }} (model: {{ .Values.llm.model }})
 Enabled skills: {{ .Values.enabledSkills }}

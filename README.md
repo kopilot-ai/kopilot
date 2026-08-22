@@ -34,17 +34,23 @@ may do without you is a dial you control.
 |---|---|---|
 | 0 | Observe | Every mutating command is refused. An `AIPolicy` with `autonomyLevel: 0` is an emergency brake you can `kubectl apply` mid-incident. |
 | 1 | Copilot | The default. Investigations run freely; destructive commands wait as approval requests. |
-| 2 | Autopilot | Namespace-scoped grants. kopilot acts alone only when every namespace a command names sits inside a grant. |
+| 2 | Autopilot | Namespace-scoped grants, contained to the policy's own namespace. kopilot acts alone only when every namespace a command names sits inside that grant. |
 
 ```yaml
 apiVersion: kopilot-ai.github.io/v1alpha1
 kind: AIPolicy
 metadata:
   name: staging-autopilot
+  namespace: staging
 spec:
   autonomyLevel: 2
-  namespaces: [staging, qa]
+  namespaces: [staging]
 ```
+
+A namespaced `AIPolicy` can only grant its own namespace; add a second
+policy in `namespace: qa` for a second grant. Naming any other namespace is
+rejected `Invalid` with a `NamespaceEscape` condition, so one compromised
+team's policy can't reach into another team's namespace.
 
 Grants reconcile live and are revoked by deletion. CRITICAL commands, opaque
 payloads (`kubectl exec`, `cp`, `attach`), and shell commands never qualify
@@ -69,24 +75,73 @@ helm install kopilot oci://ghcr.io/kopilot-ai/charts/kopilot \
 
 The chart ships the CRDs, RBAC, hardened security contexts, and the approval
 volume; set `persistence.enabled=true` for a PVC that survives pod
-rescheduling. Images are published for amd64 and arm64. Five LLM providers
-are one env var away (Ollama self-hosted by default; OpenAI, Azure OpenAI,
-Anthropic, Gemini), and no feature depends on a single vendor.
-
-Or run from source:
+rescheduling. It also generates a random bearer token per release and
+stores it in the `kopilot-secrets` Secret; pin your own instead with
+`--set api.authToken=<token>`, which is worth doing in CI or when you
+already issued one:
 
 ```bash
+helm install kopilot oci://ghcr.io/kopilot-ai/charts/kopilot \
+  --version 0.4.0 --namespace kopilot --create-namespace \
+  --set llm.provider=ollama --set api.authToken=$(openssl rand -hex 24)
+```
+
+Images are published for amd64 and arm64. Five LLM providers are one env
+var away (Ollama self-hosted by default; OpenAI, Azure OpenAI, Anthropic,
+Gemini), and no feature depends on a single vendor.
+
+Or run from source. You'll need a kubeconfig pointing at the cluster you
+want kopilot to operate on, and Ollama running locally with the default
+model already pulled:
+
+```bash
+ollama pull gpt-oss:20b
 git clone https://github.com/kopilot-ai/kopilot && cd kopilot
 pip install -e .
 cp .env.example .env    # pick your LLM provider
 kopilot serve
 ```
 
-Then ask it something:
+`kopilot ask` is a separate, standalone one-shot process, not a client of
+the `kopilot serve` you just started: it runs the agent in-process and
+prints the answer once, with no server or approval loop involved.
 
 ```bash
 kopilot ask "what pods are failing and why?"
 ```
+
+### From first curl to first approval
+
+Whichever install path you took, once the API answers on port 8080 (behind
+`kubectl port-forward svc/kopilot 8080:8080 -n kopilot` for the Helm
+install, or straight from `kopilot serve` run from source), walk a
+destructive request through the approval loop:
+
+```bash
+# Helm install: read back the token the chart generated (skip if you set
+# api.authToken yourself, or if you're running from source with no
+# API_AUTH_TOKEN set)
+export KOPILOT_TOKEN=$(kubectl get secret kopilot-secrets -n kopilot \
+  -o jsonpath='{.data.API_AUTH_TOKEN}' | base64 -d)
+
+# 1. Submit a task that needs a destructive step
+curl -X POST http://localhost:8080/tasks \
+  -H "Authorization: Bearer $KOPILOT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Delete the failed pods in namespace default"}'
+
+# 2. See the exact command it wants to run before it runs
+curl http://localhost:8080/approvals -H "Authorization: Bearer $KOPILOT_TOKEN"
+
+# 3. Approve it by id; the command you just reviewed executes as-is
+curl -X POST http://localhost:8080/approvals/<id>/approve \
+  -H "Authorization: Bearer $KOPILOT_TOKEN" \
+  -H "X-Kopilot-Operator: you"
+```
+
+More REST examples, including the deny path and a full scripted session,
+live in [`examples/README.md`](examples/README.md) and
+[`examples/api-session.sh`](examples/api-session.sh).
 
 ## Skills are YAML, and they load live
 
@@ -126,7 +181,7 @@ metrics are served as `kopilot_*`. Full reference:
 
 ```bash
 make dev      # editable install with dev dependencies
-make test     # pytest (190+ tests, including adversarial safety cases)
+make test     # pytest (200 tests, including adversarial safety cases)
 make lint     # ruff
 make helm-lint
 ```
