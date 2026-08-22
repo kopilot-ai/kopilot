@@ -4,6 +4,12 @@ Watches Warning events across all namespaces. When a specific resource+reason
 combination exceeds the threshold within the time window, triggers an automated
 investigation through the supervisor agent.
 
+Off by default (``WATCHERS_K8S_EVENTS_ENABLED``, chart value
+``watchers.k8sEvents.enabled``). Event reasons and messages are attacker-
+controllable strings that this watcher feeds straight into an LLM prompt:
+anyone who can create a Pod can create an event. Until that input is treated
+as untrusted end to end, the watcher stays opt-in.
+
 The kubernetes client's watch stream is synchronous, so it runs in a worker
 thread and feeds an asyncio queue; the async side consumes events without
 blocking the event loop.
@@ -48,6 +54,14 @@ class K8sEventWatcher:
         self._investigations: set[asyncio.Task] = set()
 
     async def start(self) -> None:
+        from kopilot.config import get_settings
+
+        if not get_settings().watchers.k8s_events_enabled:
+            logger.info(
+                "k8s_events.watcher.disabled",
+                hint="Set WATCHERS_K8S_EVENTS_ENABLED=true to enable it.",
+            )
+            return
         self._running = True
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._load_config)
@@ -59,6 +73,8 @@ class K8sEventWatcher:
         logger.info("k8s_events.watcher.started", threshold=self._threshold, window=self._window)
 
     async def stop(self) -> None:
+        if not self._running:
+            return
         self._running = False
         if self._consumer_task and not self._consumer_task.done():
             self._consumer_task.cancel()

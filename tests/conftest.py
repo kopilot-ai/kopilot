@@ -29,6 +29,14 @@ def _set_test_env(monkeypatch):
     import kopilot.executor.approvals as approvals_mod
     approvals_mod._store = None
 
+    # The tool rate limiter is a process-wide sliding window; without a reset
+    # a long parametrized run trips the 50-call limit and every later
+    # assertion fails for the wrong reason.
+    import kopilot.executor.middleware as middleware_mod
+    middleware_mod._rate_limiter = middleware_mod.ToolRateLimiter(
+        max_calls=50, window_seconds=300.0
+    )
+
     from kopilot.executor import autonomy as autonomy_mod
     autonomy_mod.reset_engine()
 

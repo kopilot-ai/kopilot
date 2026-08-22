@@ -238,5 +238,9 @@ class TestBlockedPatternBypasses:
         assert not verdict.requires_approval, cmd
 
     @pytest.mark.parametrize("cmd", ["rm -rf ./build", "rm -rf /tmp/scratch", "rm -f notes.txt"])
-    def test_ordinary_removals_still_allowed(self, cmd):
-        assert _pre_flight(cmd).allowed, cmd
+    def test_ordinary_removals_are_gated_not_blocked(self, cmd):
+        """Not root destruction, so not blocked outright — but `rm` is not a
+        read either, so deny-by-default sends it to the approval queue."""
+        verdict = _pre_flight(cmd)
+        assert verdict.requires_approval, cmd
+        assert verdict.risk == RiskLevel.HIGH, cmd
