@@ -383,6 +383,7 @@ class TestExecuteApproved:
         # payments becomes a protected namespace after the approval was granted
         monkeypatch.setenv("SAFETY_PROTECTED_NAMESPACES", '["payments"]')
         import kopilot.config as cfg_mod
+
         cfg_mod._settings = None
 
         outcome = await execute_approved(req)
@@ -402,6 +403,7 @@ def ledger_client(ledger, monkeypatch):
 
     monkeypatch.setenv("API_AUTH_TOKEN", "sekrit-token")
     import kopilot.config as cfg_mod
+
     cfg_mod._settings = None
     return TestClient(create_app())
 

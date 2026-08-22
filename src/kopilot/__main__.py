@@ -56,12 +56,14 @@ def serve(host: str | None, port: int | None):
     _start_operator_thread()
 
     from kopilot.inputs.slack import start_slack_bot
+
     start_slack_bot()
 
     # The event watcher is started inside the app lifespan so it runs on
     # uvicorn's event loop (a separate asyncio.run() would close its loop
     # and kill the watcher before the server starts).
     from kopilot.inputs.api import create_app
+
     uvicorn.run(create_app(with_event_watcher=True), host=h, port=p, log_level="info")
 
 
@@ -82,6 +84,7 @@ def api(host: str | None, port: int | None):
     """Run only the REST API server."""
     cfg = get_settings()
     from kopilot.inputs.api import create_app
+
     uvicorn.run(
         create_app(),
         host=host or cfg.api.host,
@@ -94,8 +97,10 @@ def api(host: str | None, port: int | None):
 @click.argument("prompt")
 def ask(prompt: str):
     """One-shot: ask the agent a question."""
+
     async def _ask():
         from kopilot.agent.supervisor import run_task
+
         result = await run_task(prompt)
         click.echo(f"\n{result.get('answer', 'No response.')}\n")
 

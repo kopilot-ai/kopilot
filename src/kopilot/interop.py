@@ -43,9 +43,7 @@ def _skill_summary(defn: SkillDefinition) -> dict[str, Any]:
         },
         "safety": {
             "read_first": True,
-            "approval_gated_destructive": (
-                settings.safety.require_approval_destructive
-            ),
+            "approval_gated_destructive": (settings.safety.require_approval_destructive),
             "protected_namespaces": settings.safety.protected_namespaces,
         },
     }
@@ -135,9 +133,7 @@ def get_agent_manifest() -> dict[str, Any]:
         },
         "safety": {
             "read_first": True,
-            "approval_gated_destructive": (
-                settings.safety.require_approval_destructive
-            ),
+            "approval_gated_destructive": (settings.safety.require_approval_destructive),
             "protected_namespaces": settings.safety.protected_namespaces,
         },
     }

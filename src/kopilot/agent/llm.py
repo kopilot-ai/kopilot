@@ -41,41 +41,45 @@ def get_chat_model() -> BaseChatModel:
                 base_url=cfg.ollama.base_url,
                 temperature=llm_cfg.temperature,
                 num_predict=llm_cfg.max_tokens,
-                timeout=llm_cfg.request_timeout,
+                client_kwargs={"timeout": llm_cfg.request_timeout},
             )
 
         case LLMProvider.OPENAI:
             from langchain_openai import ChatOpenAI
+            from pydantic import SecretStr
 
             _chat_model = ChatOpenAI(
                 model=cfg.openai.model or llm_cfg.model,
-                api_key=cfg.openai.api_key,
+                api_key=SecretStr(cfg.openai.api_key) if cfg.openai.api_key else None,
                 temperature=llm_cfg.temperature,
-                max_tokens=llm_cfg.max_tokens,
-                request_timeout=llm_cfg.request_timeout,
+                max_completion_tokens=llm_cfg.max_tokens,
+                timeout=llm_cfg.request_timeout,
             )
 
         case LLMProvider.AZURE_OPENAI:
             from langchain_openai import AzureChatOpenAI
+            from pydantic import SecretStr
 
             _chat_model = AzureChatOpenAI(
                 azure_endpoint=cfg.azure_openai.endpoint,
-                api_key=cfg.azure_openai.api_key,
+                api_key=SecretStr(cfg.azure_openai.api_key) if cfg.azure_openai.api_key else None,
                 azure_deployment=cfg.azure_openai.deployment,
                 api_version=cfg.azure_openai.api_version,
                 temperature=llm_cfg.temperature,
-                max_tokens=llm_cfg.max_tokens,
-                request_timeout=llm_cfg.request_timeout,
+                max_completion_tokens=llm_cfg.max_tokens,
+                timeout=llm_cfg.request_timeout,
             )
 
         case LLMProvider.ANTHROPIC:
             from langchain_anthropic import ChatAnthropic
+            from pydantic import SecretStr
 
             _chat_model = ChatAnthropic(
-                model=cfg.anthropic.model or llm_cfg.model,
-                api_key=cfg.anthropic.api_key or None,
-                max_tokens=llm_cfg.max_tokens,
+                model_name=cfg.anthropic.model or llm_cfg.model,
+                api_key=SecretStr(cfg.anthropic.api_key or ""),
+                max_tokens_to_sample=llm_cfg.max_tokens,
                 timeout=llm_cfg.request_timeout,
+                stop=None,
             )
 
         case LLMProvider.GEMINI:

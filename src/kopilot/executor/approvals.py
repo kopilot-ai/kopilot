@@ -197,7 +197,8 @@ class ApprovalStore:
         # one entry per command. The record is written to the ledger first;
         # only the queue forgets, the history never does.
         for key in [
-            k for k, r in self._requests.items()
+            k
+            for k, r in self._requests.items()
             if r.status is not ApprovalStatus.PENDING
             and now - (r.decided_at or r.created_at) > self._ttl * 4
         ]:
@@ -239,9 +240,7 @@ class ApprovalStore:
                 if req.status is ApprovalStatus.PENDING and _normalize(req.command) == normalized:
                     return req
 
-            pending = [
-                r for r in self._requests.values() if r.status is ApprovalStatus.PENDING
-            ]
+            pending = [r for r in self._requests.values() if r.status is ApprovalStatus.PENDING]
             if len(pending) >= MAX_PENDING:
                 oldest = min(pending, key=lambda r: r.created_at)
                 oldest.status = ApprovalStatus.EXPIRED

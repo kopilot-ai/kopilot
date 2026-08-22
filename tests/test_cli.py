@@ -14,10 +14,7 @@ def test_cli_help_uses_kopilot_branding():
     result = CliRunner().invoke(cli, ["--help"])
 
     assert result.exit_code == 0
-    assert (
-        "Kopilot - Autonomous AI Kubernetes operations agent."
-        in result.output
-    )
+    assert "Kopilot - Autonomous AI Kubernetes operations agent." in result.output
     assert "ask" in result.output
     assert "mcp" in result.output
     assert "serve" in result.output

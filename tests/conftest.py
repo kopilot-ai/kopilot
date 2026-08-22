@@ -15,35 +15,43 @@ def _set_test_env(monkeypatch):
     monkeypatch.setenv("LOG_FORMAT", "console")
 
     import kopilot.config as cfg_mod
+
     cfg_mod._settings = None
 
     import kopilot.skills.base as skill_mod
+
     skill_mod._registry = None
 
     import kopilot.agent.llm as llm_mod
+
     llm_mod._chat_model = None
 
     import kopilot.agent.memory as mem_mod
+
     mem_mod._checkpointer = None
 
     import kopilot.executor.approvals as approvals_mod
+
     approvals_mod._store = None
 
     # The tool rate limiter is a process-wide sliding window; without a reset
     # a long parametrized run trips the 50-call limit and every later
     # assertion fails for the wrong reason.
     import kopilot.executor.middleware as middleware_mod
+
     middleware_mod._rate_limiter = middleware_mod.ToolRateLimiter(
         max_calls=50, window_seconds=300.0
     )
 
     from kopilot.executor import autonomy as autonomy_mod
+
     autonomy_mod.reset_engine()
 
     # No persistence path in the default test env, so the ledger is off unless
     # a test asks for one with the `ledger` fixture.
     monkeypatch.delenv("LEDGER_PATH", raising=False)
     from kopilot.outputs import audit as audit_mod
+
     audit_mod.reset_ledger()
 
 
@@ -74,9 +82,7 @@ def autonomy_staging():
     """Autopilot grant for the staging namespace (max MEDIUM)."""
     from kopilot.executor.autonomy import AutopilotGrant, get_engine, reset_engine
 
-    get_engine().set_grant(
-        AutopilotGrant(name="staging-autopilot", namespaces=["staging"])
-    )
+    get_engine().set_grant(AutopilotGrant(name="staging-autopilot", namespaces=["staging"]))
     yield
     reset_engine()
 

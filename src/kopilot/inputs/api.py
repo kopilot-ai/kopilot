@@ -112,23 +112,23 @@ def _release_task_slot() -> None:
 
 
 def _record_history(prompt: str, result: dict[str, Any]) -> None:
-    _task_history.append({
-        "task_id": result["task_id"],
-        "prompt": prompt[:200],
-        "risk_level": result.get("risk_level", "low"),
-        "elapsed_ms": result.get("elapsed_ms", 0),
-        "attempts": result.get("attempts", 1),
-    })
+    _task_history.append(
+        {
+            "task_id": result["task_id"],
+            "prompt": prompt[:200],
+            "risk_level": result.get("risk_level", "low"),
+            "elapsed_ms": result.get("elapsed_ms", 0),
+            "attempts": result.get("attempts", 1),
+        }
+    )
     if len(_task_history) > MAX_HISTORY:
-        _task_history[:] = _task_history[-MAX_HISTORY // 2:]
+        _task_history[:] = _task_history[-MAX_HISTORY // 2 :]
 
 
 async def _execute(prompt: str, ctx: TaskContext, reflect: bool = False) -> TaskResponse:
     if not _acquire_task_slot():
         limit = get_settings().safety.max_concurrent_tasks
-        raise HTTPException(
-            status_code=429, detail=f"Max concurrent tasks ({limit}) reached"
-        )
+        raise HTTPException(status_code=429, detail=f"Max concurrent tasks ({limit}) reached")
     try:
         result = await run_task(prompt, context=ctx, reflect=reflect)
     except Exception:
@@ -245,9 +245,7 @@ def create_app(with_event_watcher: bool = False) -> FastAPI:
         tasks_total = Gauge("kopilot_tasks_total", "Total tasks processed", registry=registry)
         tasks_total.set(len(_task_history))
 
-        pending = Gauge(
-            "kopilot_approvals_pending", "Pending approval requests", registry=registry
-        )
+        pending = Gauge("kopilot_approvals_pending", "Pending approval requests", registry=registry)
         pending.set(len(get_approval_store().list(ApprovalStatus.PENDING)))
 
         return generate_latest(registry).decode()
@@ -255,7 +253,7 @@ def create_app(with_event_watcher: bool = False) -> FastAPI:
     @app.get("/tasks/history", dependencies=[Depends(_require_auth)])
     async def task_history(limit: int = 20):
         """Return recent task results for observability."""
-        return _task_history[-max(1, min(limit, MAX_HISTORY)):]
+        return _task_history[-max(1, min(limit, MAX_HISTORY)) :]
 
     @app.post("/tasks", response_model=TaskResponse, dependencies=[Depends(_require_auth)])
     async def submit_task(req: TaskRequest):

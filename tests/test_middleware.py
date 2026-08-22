@@ -50,13 +50,16 @@ class TestPreFlight:
         assert not verdict.allowed
         assert verdict.risk == RiskLevel.CRITICAL
 
-    @pytest.mark.parametrize("cmd", [
-        "rm  -rf  /",
-        "rm -fr /",
-        "rm -rf --no-preserve-root /",
-        "find / -name '*.log' -delete",
-        "chmod -R 000 /",
-    ])
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "rm  -rf  /",
+            "rm -fr /",
+            "rm -rf --no-preserve-root /",
+            "find / -name '*.log' -delete",
+            "chmod -R 000 /",
+        ],
+    )
     def test_blocks_rm_rf_variants(self, cmd):
         assert not _pre_flight(cmd).allowed
 
@@ -157,6 +160,7 @@ async def test_protected_namespace_blocked_at_executor(mock_subprocess):
 async def test_read_resource_file_within_allowed_root(tmp_path, monkeypatch):
     monkeypatch.setenv("SAFETY_READ_PATHS", f'["{tmp_path}"]')
     import kopilot.config as cfg_mod
+
     cfg_mod._settings = None
 
     f = tmp_path / "test.txt"
@@ -169,6 +173,7 @@ async def test_read_resource_file_within_allowed_root(tmp_path, monkeypatch):
 async def test_read_resource_outside_allowed_root_blocked(tmp_path, monkeypatch):
     monkeypatch.setenv("SAFETY_READ_PATHS", f'["{tmp_path}"]')
     import kopilot.config as cfg_mod
+
     cfg_mod._settings = None
 
     result = await read_resource.ainvoke({"path_or_url": "/etc/passwd"})
@@ -179,6 +184,7 @@ async def test_read_resource_outside_allowed_root_blocked(tmp_path, monkeypatch)
 async def test_read_resource_missing(monkeypatch, tmp_path):
     monkeypatch.setenv("SAFETY_READ_PATHS", f'["{tmp_path}"]')
     import kopilot.config as cfg_mod
+
     cfg_mod._settings = None
 
     result = await read_resource.ainvoke({"path_or_url": str(tmp_path / "nope.txt")})
@@ -195,9 +201,7 @@ async def test_read_resource_configmap_injection_blocked():
 
 @pytest.mark.asyncio
 async def test_read_resource_url_injection_blocked():
-    result = await read_resource.ainvoke(
-        {"path_or_url": 'http://example.com" ; rm -rf / ; "'}
-    )
+    result = await read_resource.ainvoke({"path_or_url": 'http://example.com" ; rm -rf / ; "'})
     assert "BLOCKED" in result
 
 
@@ -220,18 +224,21 @@ async def test_risk_level_recorded_for_task(mock_subprocess):
 class TestBlockedPatternBypasses:
     """Root-deletion forms that must not slip past the shell denylist."""
 
-    @pytest.mark.parametrize("cmd", [
-        "rm -rf --no-preserve-root /;",
-        "rm --no-preserve-root -rf /; echo x",
-        "bash -c 'rm -rf --no-preserve-root /'",
-        'sh -c "rm -rf --no-preserve-root /"',
-        "rm -rf /;",
-        "rm -rf /)",
-        "rm -rf /|tee out",
-        "chmod 000 /",
-        "dd if=/dev/zero of=/dev/sda",
-        "shutdown -h now",
-    ])
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "rm -rf --no-preserve-root /;",
+            "rm --no-preserve-root -rf /; echo x",
+            "bash -c 'rm -rf --no-preserve-root /'",
+            'sh -c "rm -rf --no-preserve-root /"',
+            "rm -rf /;",
+            "rm -rf /)",
+            "rm -rf /|tee out",
+            "chmod 000 /",
+            "dd if=/dev/zero of=/dev/sda",
+            "shutdown -h now",
+        ],
+    )
     def test_root_destruction_variants_blocked(self, cmd):
         verdict = _pre_flight(cmd)
         assert not verdict.allowed, cmd

@@ -137,9 +137,7 @@ class TestAutopilotGrants:
 
     def test_critical_never_auto_approved(self):
         eng = _engine(grants=[STAGING])
-        d = eng.decide(
-            "kubectl delete ns staging -n staging", "kubectl", RiskLevel.CRITICAL, True
-        )
+        d = eng.decide("kubectl delete ns staging -n staging", "kubectl", RiskLevel.CRITICAL, True)
         assert d is AutonomyDecision.GATE
 
     def test_opaque_payload_never_auto_approved(self):
@@ -169,8 +167,10 @@ class TestEngineFromSettings:
         monkeypatch.setenv("AUTONOMY_LEVEL", "2")
         monkeypatch.setenv("AUTONOMY_AUTOPILOT_NAMESPACES", '["staging","qa"]')
         from kopilot.config import reset_settings
+
         reset_settings()
         from kopilot.executor.autonomy import build_engine_from_settings
+
         eng = build_engine_from_settings()
         d = eng.decide("kubectl delete pod x -n qa", "kubectl", RiskLevel.MEDIUM, True)
         assert d is AutonomyDecision.AUTO_APPROVE
@@ -178,8 +178,10 @@ class TestEngineFromSettings:
 
     def test_default_is_copilot(self):
         from kopilot.config import reset_settings
+
         reset_settings()
         from kopilot.executor.autonomy import build_engine_from_settings
+
         eng = build_engine_from_settings()
         d = eng.decide("kubectl delete pod x -n staging", "kubectl", RiskLevel.MEDIUM, True)
         assert d is AutonomyDecision.GATE

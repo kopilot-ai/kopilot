@@ -56,13 +56,17 @@ def _emit_event(body, *, type: str, reason: str, message: str) -> None:
 
 
 def _spec_hash(spec) -> str:
-    return hashlib.sha256(
-        json.dumps(dict(spec), sort_keys=True, default=str).encode()
-    ).hexdigest()[:16]
+    return hashlib.sha256(json.dumps(dict(spec), sort_keys=True, default=str).encode()).hexdigest()[
+        :16
+    ]
 
 
 def _set_condition(
-    patch, cond_type: str, status: str, reason: str, message: str,
+    patch,
+    cond_type: str,
+    status: str,
+    reason: str,
+    message: str,
     existing_conditions: list | None = None,
 ) -> None:
     """Set a status condition following K8s API conventions.
@@ -84,13 +88,15 @@ def _set_condition(
             patch.status["conditions"] = conditions
             return
 
-    conditions.append({
-        "type": cond_type,
-        "status": status,
-        "reason": reason,
-        "message": message[:500],
-        "lastTransitionTime": _now_iso(),
-    })
+    conditions.append(
+        {
+            "type": cond_type,
+            "status": status,
+            "reason": reason,
+            "message": message[:500],
+            "lastTransitionTime": _now_iso(),
+        }
+    )
     patch.status["conditions"] = conditions
 
 
@@ -116,9 +122,7 @@ async def _run_aitask(spec, name, namespace, patch, status) -> None:
     # re-issue its command: the side effects may already have landed. Only a
     # real spec change, which moves the hash, re-executes.
     if prior_phase and prior_phase not in _TERMINAL_PHASES and same_spec:
-        logger.warning(
-            "operator.aitask.resync_ignored", name=name, phase=prior_phase
-        )
+        logger.warning("operator.aitask.resync_ignored", name=name, phase=prior_phase)
         return
 
     prompt = spec.get("prompt", "")
@@ -126,7 +130,11 @@ async def _run_aitask(spec, name, namespace, patch, status) -> None:
         patch.status["phase"] = "Failed"
         patch.status["specHash"] = spec_hash
         _set_condition(
-            patch, "Ready", "False", "InvalidSpec", "spec.prompt is required",
+            patch,
+            "Ready",
+            "False",
+            "InvalidSpec",
+            "spec.prompt is required",
             existing_conditions=status.get("conditions"),
         )
         return
@@ -154,7 +162,11 @@ async def _run_aitask(spec, name, namespace, patch, status) -> None:
         patch.status["completedAt"] = _now_iso()
         patch.status["elapsedMs"] = result.get("elapsed_ms", 0)
         _set_condition(
-            patch, "Ready", "True", "Completed", "Task completed successfully",
+            patch,
+            "Ready",
+            "True",
+            "Completed",
+            "Task completed successfully",
             existing_conditions=status.get("conditions"),
         )
     except Exception as exc:
@@ -163,7 +175,11 @@ async def _run_aitask(spec, name, namespace, patch, status) -> None:
         patch.status["message"] = str(exc)[:500]
         patch.status["completedAt"] = _now_iso()
         _set_condition(
-            patch, "Ready", "False", "ExecutionFailed", str(exc)[:500],
+            patch,
+            "Ready",
+            "False",
+            "ExecutionFailed",
+            str(exc)[:500],
             existing_conditions=status.get("conditions"),
         )
         # Do not re-raise: kopf would retry and re-execute a task whose side
@@ -208,13 +224,19 @@ async def on_aitask_resume(name, namespace, patch, status, body=None, **_):
     patch.status["message"] = message[:500]
     patch.status["completedAt"] = _now_iso()
     _set_condition(
-        patch, "Ready", "False", "OperatorRestarted", message,
+        patch,
+        "Ready",
+        "False",
+        "OperatorRestarted",
+        message,
         existing_conditions=status.get("conditions"),
     )
     _emit_event(body, type="Warning", reason="OperatorRestarted", message=message)
     log_event(
         "operator.aitask.interrupted",
-        name=name, namespace=namespace, phase=phase,
+        name=name,
+        namespace=namespace,
+        phase=phase,
     )
 
 
@@ -244,7 +266,10 @@ def _apply_aiskill(spec, name, patch, status) -> None:
         get_registry().unregister(name)
         patch.status["phase"] = "Disabled"
         _set_condition(
-            patch, "Ready", "False", "Disabled",
+            patch,
+            "Ready",
+            "False",
+            "Disabled",
             f"Skill '{name}' is disabled",
             existing_conditions=existing,
         )
@@ -255,7 +280,10 @@ def _apply_aiskill(spec, name, patch, status) -> None:
     if not system_prompt:
         patch.status["phase"] = "Invalid"
         _set_condition(
-            patch, "Ready", "False", "Invalid",
+            patch,
+            "Ready",
+            "False",
+            "Invalid",
             "spec.systemPrompt is required to load a skill",
             existing_conditions=existing,
         )
@@ -277,7 +305,10 @@ def _apply_aiskill(spec, name, patch, status) -> None:
         logger.exception("operator.aiskill.load_failed", skill=name)
         patch.status["phase"] = "Failed"
         _set_condition(
-            patch, "Ready", "False", "LoadFailed",
+            patch,
+            "Ready",
+            "False",
+            "LoadFailed",
             f"Skill '{name}' failed to load: {exc}",
             existing_conditions=existing,
         )
@@ -287,7 +318,10 @@ def _apply_aiskill(spec, name, patch, status) -> None:
     patch.status["phase"] = "Loaded"
     patch.status["loaded"] = True
     _set_condition(
-        patch, "Ready", "True", "Loaded",
+        patch,
+        "Ready",
+        "True",
+        "Loaded",
         f"Skill '{name}' loaded into the registry",
         existing_conditions=existing,
     )
@@ -360,7 +394,10 @@ def _apply_aipolicy(spec, name, patch, status, namespace=None, body=None) -> Non
         engine.set_brake(name)
         patch.status["phase"] = "Active"
         _set_condition(
-            patch, "Ready", "True", "BrakeEngaged",
+            patch,
+            "Ready",
+            "True",
+            "BrakeEngaged",
             f"Policy '{name}' holds the emergency brake: all mutations are refused",
             existing_conditions=existing,
         )
@@ -371,7 +408,10 @@ def _apply_aipolicy(spec, name, patch, status, namespace=None, body=None) -> Non
         if not namespaces:
             patch.status["phase"] = "Invalid"
             _set_condition(
-                patch, "Ready", "False", "Invalid",
+                patch,
+                "Ready",
+                "False",
+                "Invalid",
                 "autonomyLevel 2 requires spec.namespaces to scope the autopilot",
                 existing_conditions=existing,
             )
@@ -386,22 +426,29 @@ def _apply_aipolicy(spec, name, patch, status, namespace=None, body=None) -> Non
             )
             patch.status["phase"] = "Invalid"
             _set_condition(
-                patch, "Ready", "False", "NamespaceEscape", message,
+                patch,
+                "Ready",
+                "False",
+                "NamespaceEscape",
+                message,
                 existing_conditions=existing,
             )
-            _emit_event(
-                body, type="Warning", reason="NamespaceEscape", message=message
-            )
+            _emit_event(body, type="Warning", reason="NamespaceEscape", message=message)
             log_event(
                 "operator.aipolicy.namespace_escape",
-                name=name, namespace=namespace, requested=namespaces,
+                name=name,
+                namespace=namespace,
+                requested=namespaces,
             )
             return
 
         engine.set_grant(AutopilotGrant(name=name, namespaces=namespaces))
         patch.status["phase"] = "Active"
         _set_condition(
-            patch, "Ready", "True", "AutopilotGranted",
+            patch,
+            "Ready",
+            "True",
+            "AutopilotGranted",
             f"Policy '{name}' grants autopilot in: {', '.join(namespaces)}",
             existing_conditions=existing,
         )
@@ -410,7 +457,10 @@ def _apply_aipolicy(spec, name, patch, status, namespace=None, body=None) -> Non
 
     patch.status["phase"] = "Active"
     _set_condition(
-        patch, "Ready", "True", "Copilot",
+        patch,
+        "Ready",
+        "True",
+        "Copilot",
         f"Policy '{name}' keeps approval-gated copilot behavior",
         existing_conditions=existing,
     )

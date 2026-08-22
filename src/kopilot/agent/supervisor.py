@@ -180,9 +180,7 @@ def _content_to_text(content: Any) -> str:
 async def _reflect(prompt: str, response: str) -> dict[str, Any]:
     """Run a lightweight reflection on the agent's response."""
     llm = get_chat_model()
-    reflection_input = REFLECTION_PROMPT.format(
-        prompt=prompt[:1000], response=response[:3000]
-    )
+    reflection_input = REFLECTION_PROMPT.format(prompt=prompt[:1000], response=response[:3000])
     try:
         result = await llm.ainvoke([HumanMessage(content=reflection_input)])
         content = _content_to_text(result.content) if hasattr(result, "content") else str(result)
