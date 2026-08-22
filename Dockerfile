@@ -1,4 +1,5 @@
-FROM python:3.13-slim AS base
+# python:3.13-slim, digest-pinned; refresh with `docker buildx imagetools inspect python:3.13-slim`
+FROM python:3.13-slim@sha256:ffb752e139c0a19692a43af8d8523b274222dd68eebad5d583b45c2201c6e30a AS base
 
 ARG KUBECTL_VERSION=v1.33.4
 ARG HELM_VERSION=v3.16.4
@@ -25,10 +26,10 @@ RUN groupadd -r -g 10001 kopilot && \
 
 WORKDIR /app
 
-COPY pyproject.toml README.md ./
-COPY src/kopilot/__init__.py src/kopilot/__init__.py
-RUN pip install --no-cache-dir .
+COPY requirements-lock.txt ./
+RUN pip install --no-cache-dir --require-hashes -r requirements-lock.txt
 
+COPY pyproject.toml README.md ./
 COPY src/ /app/src/
 RUN pip install --no-cache-dir --no-deps .
 

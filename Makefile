@@ -42,7 +42,10 @@ build: ## Build container image
 build-podman: ## Build with Podman
 	podman build -t $(IMAGE):$(TAG) .
 
-push: ## Push container image
+push: ## Push container image (requires explicit TAG=x.y.z, refuses the "latest" default)
+ifeq ($(TAG),latest)
+	$(error TAG must be set explicitly, e.g. "make push TAG=0.4.0" -- refusing to push "latest" to $(IMAGE))
+endif
 	docker push $(IMAGE):$(TAG)
 
 deploy: ## Deploy via Helm
