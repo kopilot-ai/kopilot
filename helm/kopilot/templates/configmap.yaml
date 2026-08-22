@@ -37,5 +37,6 @@ data:
   {{- if ne .Values.autonomy.autopilotNamespaces "[]" }}
   AUTONOMY_AUTOPILOT_NAMESPACES: {{ .Values.autonomy.autopilotNamespaces | quote }}
   {{- end }}
+  WATCHERS_K8S_EVENTS_ENABLED: {{ .Values.watchers.k8sEvents.enabled | quote }}
   LOG_LEVEL: {{ .Values.observability.logLevel | quote }}
   LOG_FORMAT: {{ .Values.observability.logFormat | quote }}

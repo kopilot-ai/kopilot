@@ -5,6 +5,10 @@ metadata:
   name: {{ include "kopilot.fullname" . }}-data
   labels:
     {{- include "kopilot.labels" . | nindent 4 }}
+  annotations:
+    # The approval queue is the agent's audit trail. Uninstalling the release
+    # should not delete the record of what was approved and by whom.
+    helm.sh/resource-policy: keep
 spec:
   accessModes:
     {{- toYaml .Values.persistence.accessModes | nindent 4 }}

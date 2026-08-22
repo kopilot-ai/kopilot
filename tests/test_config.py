@@ -1,7 +1,9 @@
 """Tests for configuration."""
 
+import pytest
+from pydantic import ValidationError
 
-from kopilot.config import GeminiSettings, LLMProvider, get_settings
+from kopilot.config import AutonomySettings, GeminiSettings, LLMProvider, get_settings
 
 
 def test_defaults():
@@ -50,3 +52,25 @@ def test_safety_max_concurrent_tasks():
 
 def test_observability_defaults():
     get_settings()
+
+
+def test_autonomy_defaults_to_copilot():
+    assert get_settings().autonomy.level == 1
+
+
+@pytest.mark.parametrize("level", ["-1", "-99", "3", "10"])
+def test_autonomy_level_bounded_to_the_dial(monkeypatch, level):
+    """Out-of-range levels are rejected; -1 used to silently disable observe."""
+    monkeypatch.setenv("AUTONOMY_LEVEL", level)
+    with pytest.raises(ValidationError):
+        AutonomySettings()
+
+
+@pytest.mark.parametrize("level", ["0", "1", "2"])
+def test_autonomy_level_accepts_the_dial(monkeypatch, level):
+    monkeypatch.setenv("AUTONOMY_LEVEL", level)
+    assert AutonomySettings().level == int(level)
+
+
+def test_event_watcher_is_off_by_default():
+    assert get_settings().watchers.k8s_events_enabled is False
