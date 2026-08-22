@@ -1,0 +1,16 @@
+# Go stdlib/x-net/x-crypto CVEs baked into the newest upstream release
+# binaries of kubectl (v1.36.4) and helm (v3.21.4). Fixes exist only in
+# Go 1.25.13/1.26.6/1.27.0-rc.3 (released 2026-08); no vendor binary is
+# built with them yet. Remove entries when kubectl/helm ship rebuilt
+# releases. Reviewed 2026-08-22.
+CVE-2026-33818
+CVE-2026-39821
+CVE-2026-46600
+CVE-2026-56853
+CVE-2026-56858
+CVE-2026-56859
+CVE-2026-56860
+CVE-2026-56862
+# oras-go v2.6.1 inside helm v3.21.4; fixed in oras-go 2.6.2, not yet in
+# any helm release. Reviewed 2026-08-22.
+CVE-2026-50163

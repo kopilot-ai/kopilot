@@ -35,7 +35,8 @@ RUN pip install --no-cache-dir pip==26.2.1 setuptools==84.0.0 && \
 
 COPY pyproject.toml README.md ./
 COPY src/ /app/src/
-RUN pip install --no-cache-dir --no-deps .
+RUN pip install --no-cache-dir --no-deps . && \
+    pip uninstall -y pip setuptools
 
 # Numeric UID so Kubernetes runAsNonRoot can verify the user
 USER 10001:10001
