@@ -99,7 +99,7 @@ main() {
     info ""
     info "Next steps:"
     info "  1. Build image:  make build-podman  (or make build)"
-    info "  2. Load image:   kind load docker-image kopilot/kopilot:latest --name ${CLUSTER_NAME}"
+    info "  2. Load image:   kind load docker-image ghcr.io/kopilot-ai/kopilot:latest --name ${CLUSTER_NAME}"
     info "  3. Deploy:       kubectl apply -f deploy/quickstart.yaml"
     info "  4. Or use Helm:  make deploy"
 }
