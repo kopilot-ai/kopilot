@@ -2,6 +2,18 @@
 
 Implements reconciliation with status conditions, idempotency guards, and
 update handling for AITask, AISkill, and AIPolicy resources.
+
+In-process state (the autonomy engine's grants and brakes, the skill
+registry) lives in memory, so it dies with the pod. The ``@kopf.on.resume``
+handlers rebuild it from the live custom resources every time the operator
+starts: without them a restart silently reverts the cluster to default
+autonomy and to the on-disk skills only. Resume shares the same apply
+functions as create/update, and every one of them recomputes state from the
+spec instead of mutating it incrementally, so replaying them is a fixed
+point.
+
+AITask is the exception: it has side effects, so resume never re-executes.
+It only reconciles a task that was still running when the operator stopped.
 """
 
 from __future__ import annotations
@@ -26,6 +38,21 @@ _TERMINAL_PHASES = {"Completed", "Failed"}
 
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _emit_event(body, *, type: str, reason: str, message: str) -> None:
+    """Post a Kubernetes event for the object, best-effort.
+
+    ``kopf.event`` needs the operator's context vars, which only exist inside
+    a running kopf loop; direct calls (tests, ``kopilot ask``) would raise.
+    A missing event must never fail a reconcile, so it is swallowed.
+    """
+    if body is None:
+        return
+    try:
+        kopf.event(body, type=type, reason=reason, message=message[:1000])
+    except Exception:  # noqa: BLE001 — events are advisory, never load-bearing
+        logger.debug("operator.event.not_posted", reason=reason)
 
 
 def _spec_hash(spec) -> str:
@@ -77,10 +104,21 @@ async def _run_aitask(spec, name, namespace, patch, status) -> None:
 
     status = status or {}
     spec_hash = _spec_hash(spec)
+    prior_phase = status.get("phase")
+    same_spec = status.get("specHash") == spec_hash
 
     # Idempotency guard: skip when this exact spec already ran to completion.
-    if status.get("phase") in _TERMINAL_PHASES and status.get("specHash") == spec_hash:
+    if prior_phase in _TERMINAL_PHASES and same_spec:
         logger.info("operator.aitask.already_processed", name=name)
+        return
+
+    # A re-sync of a task that is still running (or crashed mid-run) must not
+    # re-issue its command: the side effects may already have landed. Only a
+    # real spec change, which moves the hash, re-executes.
+    if prior_phase and prior_phase not in _TERMINAL_PHASES and same_spec:
+        logger.warning(
+            "operator.aitask.resync_ignored", name=name, phase=prior_phase
+        )
         return
 
     prompt = spec.get("prompt", "")
@@ -144,6 +182,40 @@ async def on_aitask_update(spec, name, namespace, patch, status, **_):
     """Re-execute when the spec actually changes (guarded by spec hash)."""
     log_event("operator.aitask.updated", name=name)
     await _run_aitask(spec, name, namespace, patch, status)
+
+
+@kopf.on.resume(GROUP, VERSION, "aitasks")
+async def on_aitask_resume(name, namespace, patch, status, body=None, **_):
+    """Close out a task that was mid-flight when the operator stopped.
+
+    The command may or may not have run, and the operator cannot tell which,
+    so the safe default is to fail the task with the reason rather than
+    re-execute it. Tasks in a terminal phase are left untouched, and a task
+    created while the operator was down carries no phase at all: kopf has no
+    handling record for it, so the create handler runs it as usual.
+    """
+    status = status or {}
+    phase = status.get("phase")
+    if not phase or phase in _TERMINAL_PHASES:
+        return
+
+    message = (
+        f"Task was in phase '{phase}' when the operator restarted. Its "
+        "command may already have run, so it is marked Failed instead of "
+        "being retried. Re-apply the AITask to run it again."
+    )
+    patch.status["phase"] = "Failed"
+    patch.status["message"] = message[:500]
+    patch.status["completedAt"] = _now_iso()
+    _set_condition(
+        patch, "Ready", "False", "OperatorRestarted", message,
+        existing_conditions=status.get("conditions"),
+    )
+    _emit_event(body, type="Warning", reason="OperatorRestarted", message=message)
+    log_event(
+        "operator.aitask.interrupted",
+        name=name, namespace=namespace, phase=phase,
+    )
 
 
 @kopf.on.delete(GROUP, VERSION, "aitasks")
@@ -236,6 +308,18 @@ async def on_aiskill_update(spec, name, patch, status, **_):
     _apply_aiskill(spec, name, patch, status)
 
 
+@kopf.on.resume(GROUP, VERSION, "aiskills")
+async def on_aiskill_resume(spec, name, patch, status, **_):
+    """Reload CRD skills into a fresh process on operator start.
+
+    Idempotent against create: ``register`` replaces by name and
+    ``unregister`` is a no-op when absent, so the registry lands in the same
+    state whichever handler got there first.
+    """
+    logger.info("operator.aiskill.resumed", skill=name)
+    _apply_aiskill(spec, name, patch, status)
+
+
 @kopf.on.delete(GROUP, VERSION, "aiskills")
 async def on_aiskill_delete(name, **_):
     """Remove a deleted CRD skill from the registry."""
@@ -248,12 +332,18 @@ async def on_aiskill_delete(name, **_):
 # ── AIPolicy ────────────────────────────────────────────────────────────────
 
 
-def _apply_aipolicy(spec, name, patch, status) -> None:
+def _apply_aipolicy(spec, name, patch, status, namespace=None, body=None) -> None:
     """Reconcile an AIPolicy into the autonomy engine.
 
     ``autonomyLevel: 0`` engages a cluster-wide emergency brake, ``2`` grants
     namespace-scoped autopilot, ``1`` (or absent) is explicit copilot and
     clears any prior grant or brake from this policy.
+
+    AIPolicy is a namespaced resource, so an autopilot grant may not reach
+    outside the namespace the policy itself lives in: whoever can create a
+    policy in ``dev`` must not thereby be granted autopilot in ``prod``.
+    The brake is deliberately not contained; restricting the whole cluster
+    fails safe, and that is what the emergency brake is for.
     """
     from kopilot.executor.autonomy import AutopilotGrant, get_engine
 
@@ -287,6 +377,27 @@ def _apply_aipolicy(spec, name, patch, status) -> None:
             )
             log_event("operator.aipolicy.invalid", name=name)
             return
+
+        outside = [ns for ns in namespaces if ns != namespace] if namespace else []
+        if outside:
+            message = (
+                f"Policy '{name}' lives in namespace '{namespace}' and may only "
+                f"grant autopilot there; refused for: {', '.join(sorted(outside))}"
+            )
+            patch.status["phase"] = "Invalid"
+            _set_condition(
+                patch, "Ready", "False", "NamespaceEscape", message,
+                existing_conditions=existing,
+            )
+            _emit_event(
+                body, type="Warning", reason="NamespaceEscape", message=message
+            )
+            log_event(
+                "operator.aipolicy.namespace_escape",
+                name=name, namespace=namespace, requested=namespaces,
+            )
+            return
+
         engine.set_grant(AutopilotGrant(name=name, namespaces=namespaces))
         patch.status["phase"] = "Active"
         _set_condition(
@@ -307,17 +418,29 @@ def _apply_aipolicy(spec, name, patch, status) -> None:
 
 
 @kopf.on.create(GROUP, VERSION, "aipolicies")
-async def on_aipolicy_create(spec, name, patch, status, **_):
+async def on_aipolicy_create(spec, name, patch, status, namespace=None, body=None, **_):
     """Register an AI policy."""
     logger.info("operator.aipolicy.created", policy=name)
-    _apply_aipolicy(spec, name, patch, status)
+    _apply_aipolicy(spec, name, patch, status, namespace=namespace, body=body)
 
 
 @kopf.on.update(GROUP, VERSION, "aipolicies", field="spec")
-async def on_aipolicy_update(spec, name, patch, status, **_):
+async def on_aipolicy_update(spec, name, patch, status, namespace=None, body=None, **_):
     """Handle policy updates."""
     logger.info("operator.aipolicy.updated", policy=name)
-    _apply_aipolicy(spec, name, patch, status)
+    _apply_aipolicy(spec, name, patch, status, namespace=namespace, body=body)
+
+
+@kopf.on.resume(GROUP, VERSION, "aipolicies")
+async def on_aipolicy_resume(spec, name, patch, status, namespace=None, body=None, **_):
+    """Rebuild grants and brakes in a fresh process on operator start.
+
+    This is the handler that keeps the emergency brake engaged across a pod
+    restart. Idempotent against create: the apply drops this policy's grant
+    and brake first, then re-derives both from the spec.
+    """
+    logger.info("operator.aipolicy.resumed", policy=name)
+    _apply_aipolicy(spec, name, patch, status, namespace=namespace, body=body)
 
 
 @kopf.on.delete(GROUP, VERSION, "aipolicies")
