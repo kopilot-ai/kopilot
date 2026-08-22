@@ -1,9 +1,10 @@
 Kopilot has been deployed.
 
-1. Read the API bearer token (every task, history, metrics and approval
-   endpoint requires it):
+1. Read the API bearer token. The chart generates one per release unless you
+   set api.authToken yourself; every task, history, metrics and approval
+   endpoint requires it:
 {{- if .Values.existingSecret }}
-  kubectl get secret {{ .Values.existingSecret }} -n {{ .Release.Namespace }} -o jsonpath='{.data.API_AUTH_TOKEN}' | base64 -d
+  export KOPILOT_TOKEN=$(kubectl get secret {{ .Values.existingSecret }} -n {{ .Release.Namespace }} -o jsonpath='{.data.API_AUTH_TOKEN}' | base64 -d)
 {{- else }}
   export KOPILOT_TOKEN=$(kubectl get secret {{ include "kopilot.fullname" . }}-secrets -n {{ .Release.Namespace }} -o jsonpath='{.data.API_AUTH_TOKEN}' | base64 -d)
 {{- end }}
@@ -12,7 +13,7 @@ Kopilot has been deployed.
    rather than exposing it:
   kubectl port-forward svc/{{ include "kopilot.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }} -n {{ .Release.Namespace }}
 
-3. Check agent health:
+3. Check agent health (no auth required):
   curl http://localhost:{{ .Values.service.port }}/health
 
 4. Submit a task:
@@ -23,8 +24,10 @@ Kopilot has been deployed.
 
 5. Approve what it wants to change. At autonomy level {{ .Values.autonomy.level }},
    every mutating command waits for a human:
-  curl -H "Authorization: Bearer $KOPILOT_TOKEN" http://localhost:{{ .Values.service.port }}/approvals
-  curl -X POST -H "Authorization: Bearer $KOPILOT_TOKEN" http://localhost:{{ .Values.service.port }}/approvals/<id>/approve
+  curl http://localhost:{{ .Values.service.port }}/approvals -H "Authorization: Bearer $KOPILOT_TOKEN"
+  curl -X POST http://localhost:{{ .Values.service.port }}/approvals/<id>/approve \
+    -H "Authorization: Bearer $KOPILOT_TOKEN" \
+    -H "X-Kopilot-Operator: <you>"
 
 6. Create a task via CRD:
   cat <<EOF | kubectl apply -f -
@@ -35,6 +38,15 @@ Kopilot has been deployed.
   spec:
     prompt: "Check cluster health and report any issues"
   EOF
+
+7. View skills:
+  curl http://localhost:{{ .Values.service.port }}/skills
+
+If no Secret key comes back in step 1 (an existingSecret without
+API_AUTH_TOKEN), the API runs with no auth at all: every endpoint above
+answers with no header, and the pod logs an "api.auth_disabled" warning on
+every start. Fine for a throwaway kind cluster; not for anything reachable
+by anyone else.
 
 LLM provider: {{ .Values.llm.provider }} (model: {{ .Values.llm.model }})
 Enabled skills: {{ .Values.enabledSkills }}

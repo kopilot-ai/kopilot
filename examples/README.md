@@ -13,7 +13,7 @@ kubectl apply -f ../helm/kopilot/crds/
 | `aitask-incident.yaml` | High-priority incident investigation scoped to one namespace |
 | `aipolicy-safety.yaml` | An AIPolicy resource documenting guardrail intent |
 | `skills/deployment-runbook.yaml` | A custom YAML skill (org-specific runbook agent) |
-| `custom-skills-configmap.yaml` | Mount custom skills through the Helm chart |
+| `custom-skills-configmap.yaml` | Mount custom skills through the Helm chart, and add them to `enabledSkills` so the loader doesn't skip them |
 | `values-gemini.yaml` | Helm values for Google Gemini |
 | `values-openai.yaml` | Helm values for OpenAI |
 | `values-anthropic.yaml` | Helm values for Anthropic Claude |
