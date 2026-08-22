@@ -27,7 +27,10 @@ RUN groupadd -r -g 10001 kopilot && \
 WORKDIR /app
 
 COPY requirements-lock.txt ./
-RUN pip install --no-cache-dir --require-hashes -r requirements-lock.txt
+# The image's bundled pip mis-resolves the hash-locked set; 26.2.1 is the
+# resolver the lock was verified against.
+RUN pip install --no-cache-dir pip==26.2.1 && \
+    pip install --no-cache-dir --require-hashes -r requirements-lock.txt
 
 COPY pyproject.toml README.md ./
 COPY src/ /app/src/
