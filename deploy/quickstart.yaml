@@ -3,11 +3,19 @@
 # Apply CRDs first:   kubectl apply -f helm/kopilot/crds/
 # Then this file:     kubectl apply -f deploy/quickstart.yaml
 #
-# The service account below gets a scoped ClusterRole (read-most, write on
-# workloads). Review it before applying, and prefer the Helm chart for
-# anything beyond a first look. The API is exposed on NodePort 30080 with no
-# auth token set — do not use this manifest on a shared or reachable cluster
-# without setting API_AUTH_TOKEN.
+# The service account below gets a scoped ClusterRole: reads, plus
+# create/update/patch on Deployments and StatefulSets. Nothing here can delete
+# a workload, create a Pod, or read a Secret. Review it before applying, and
+# prefer the Helm chart for anything beyond a first look.
+#
+# The Service is ClusterIP. Reach the API by port-forwarding it:
+#   kubectl port-forward -n kopilot svc/kopilot 8080:8080
+#
+# No auth token is set, which is why nothing is published off-cluster. Before
+# this goes anywhere shared, create a token and reference it:
+#   kubectl create secret generic kopilot-auth -n kopilot \
+#     --from-literal=API_AUTH_TOKEN="$(openssl rand -hex 16)"
+# then add an envFrom secretRef for it to the Deployment below.
 ---
 apiVersion: v1
 kind: Namespace
@@ -28,7 +36,13 @@ data:
   API_PORT: "8080"
   LOG_LEVEL: "INFO"
   LOG_FORMAT: "json"
+  # Gates every mutating command on a human approval, not just deletions.
   SAFETY_REQUIRE_APPROVAL_DESTRUCTIVE: "true"
+  # 0 = observe, 1 = copilot (approval-gated), 2 = autopilot.
+  AUTONOMY_LEVEL: "1"
+  # Event-driven investigations feed attacker-controllable event text into an
+  # LLM prompt. Off until that input is treated as untrusted.
+  WATCHERS_K8S_EVENTS_ENABLED: "false"
   ENABLED_SKILLS: '["security","administration","networking","monitoring","troubleshooting","cost_optimization"]'
 ---
 apiVersion: v1
@@ -49,11 +63,20 @@ rules:
                 "serviceaccounts", "resourcequotas", "limitranges"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets",
+                "deployments/scale", "statefulsets/scale"]
+    verbs: ["get", "list", "watch"]
+  # The only writes the shipped administration skill issues: create a
+  # Deployment, scale it, roll it back. No delete, and nothing on DaemonSets.
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["create", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale", "statefulsets/scale"]
+    verbs: ["update", "patch"]
   - apiGroups: ["batch"]
     resources: ["jobs", "cronjobs"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["autoscaling"]
     resources: ["horizontalpodautoscalers"]
     verbs: ["get", "list", "watch"]
@@ -112,7 +135,9 @@ spec:
           type: RuntimeDefault
       containers:
         - name: agent
-          image: ghcr.io/kopilot-ai/kopilot:latest
+          # Pinned, not :latest — a quickstart that silently changes what it
+          # runs is not a quickstart.
+          image: ghcr.io/kopilot-ai/kopilot:0.4.0
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false
@@ -148,10 +173,11 @@ metadata:
   name: kopilot
   namespace: kopilot
 spec:
-  type: NodePort
+  # ClusterIP, not NodePort: reach it with
+  #   kubectl port-forward -n kopilot svc/kopilot 8080:8080
+  type: ClusterIP
   ports:
     - port: 8080
       targetPort: 8080
-      nodePort: 30080
   selector:
     app: kopilot

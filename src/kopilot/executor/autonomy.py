@@ -2,10 +2,13 @@
 
 Three levels, enforced at the executor:
 
-- **0 — observe**: every mutating command is refused outright. Applying an
-  AIPolicy with ``autonomyLevel: 0`` acts as a cluster-wide emergency brake.
-- **1 — copilot** (default): today's behavior — destructive commands wait
-  for a human approval.
+- **0 — observe**: every mutating command is refused outright — the refusal
+  keys off ``is_mutating``, not off whether the safety layer happened to ask
+  for approval, so a command that slips past approval gating still stops here.
+  Applying an AIPolicy with ``autonomyLevel: 0`` acts as a cluster-wide
+  emergency brake.
+- **1 — copilot** (default): every mutating command waits for a human
+  approval; reads run freely.
 - **2 — autopilot**: namespace-scoped grants auto-approve approval-gated
   commands, but only when every namespace the command names is inside the
   grant, the tool is kubectl or helm, and the command names its namespaces
@@ -31,6 +34,7 @@ from kopilot.agent.safety import (
     _NS_PAT,
     _OPAQUE_PAYLOAD_PAT,
     RiskLevel,
+    is_mutating,
     normalize_command,
 )
 
@@ -142,7 +146,10 @@ class AutonomyEngine:
     ) -> AutonomyDecision:
         with self._lock:
             observe = self._observe_locked()
-        if observe and needs_approval:
+        # Observe mode refuses on *mutation*, not on approval-required. The two
+        # used to be the same set; keeping them separate means a gap in the
+        # approval rules can never quietly re-open the emergency brake.
+        if observe and (needs_approval or is_mutating(command)):
             return AutonomyDecision.REFUSE
         if not needs_approval:
             return AutonomyDecision.ALLOW
@@ -155,7 +162,10 @@ def build_engine_from_settings() -> AutonomyEngine:
     from kopilot.config import get_settings
 
     cfg = get_settings().autonomy
-    engine = AutonomyEngine(base_level=min(cfg.level, 1))
+    # Level 2 keeps a copilot base and adds a grant on top; anything at or
+    # below 0 is observe. Settings validation pins the range to 0-2, and the
+    # clamp here keeps a hand-built AutonomySettings from disabling observe.
+    engine = AutonomyEngine(base_level=0 if cfg.level <= 0 else 1)
     if cfg.level >= 2 and cfg.autopilot_namespaces:
         engine.set_grant(
             AutopilotGrant(

@@ -1,3 +1,6 @@
+{{- if gt (int .Values.replicaCount) 1 }}
+{{- fail "kopilot: replicaCount must be 1. Conversation state, the rate limiter, and the approval queue are process-local; a second replica splits the approval queue and double-processes AITask resources." }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -6,6 +9,12 @@ metadata:
     {{- include "kopilot.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  {{- if .Values.persistence.enabled }}
+  # A ReadWriteOnce PVC cannot be attached to the old and new pod at once, so
+  # a RollingUpdate would deadlock on every upgrade.
+  strategy:
+    type: Recreate
+  {{- end }}
   selector:
     matchLabels:
       {{- include "kopilot.selectorLabels" . | nindent 6 }}
