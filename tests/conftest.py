@@ -40,6 +40,23 @@ def _set_test_env(monkeypatch):
     from kopilot.executor import autonomy as autonomy_mod
     autonomy_mod.reset_engine()
 
+    # No persistence path in the default test env, so the ledger is off unless
+    # a test asks for one with the `ledger` fixture.
+    monkeypatch.delenv("LEDGER_PATH", raising=False)
+    from kopilot.outputs import audit as audit_mod
+    audit_mod.reset_ledger()
+
+
+@pytest.fixture
+def ledger(tmp_path, monkeypatch):
+    """Point the audit ledger at a temp file and hand back its Ledger."""
+    from kopilot.outputs import audit as audit_mod
+
+    monkeypatch.setenv("LEDGER_PATH", str(tmp_path / "ledger.jsonl"))
+    audit_mod.reset_ledger()
+    yield audit_mod.get_ledger()
+    audit_mod.reset_ledger()
+
 
 @pytest.fixture
 def mock_subprocess(monkeypatch):

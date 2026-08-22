@@ -14,6 +14,7 @@ import signal
 import threading
 import time
 from collections import defaultdict
+from dataclasses import dataclass
 
 import structlog
 from langchain_core.tools import tool
@@ -21,7 +22,15 @@ from langchain_core.tools import tool
 from kopilot.agent.safety import RiskLevel, SafetyVerdict, assess_command, is_mutating
 from kopilot.config import get_settings
 from kopilot.executor.approvals import get_approval_store
-from kopilot.outputs.audit import log_event
+from kopilot.outputs.audit import (
+    SAFETY_AUTHORITY,
+    Decision,
+    authority_for,
+    log_event,
+    record_command_event,
+    redact_command,
+    sha256_hex,
+)
 from kopilot.taskscope import current_task_id, record_risk
 
 logger = structlog.get_logger(__name__)
@@ -197,15 +206,26 @@ async def _exec(cmd: str | list[str], timeout: int = DEFAULT_TIMEOUT) -> str:
     raise CommandTimeoutError(f"Command timed out after {timeout}s: {display[:100]}")
 
 
+def _denylist_verdict() -> SafetyVerdict:
+    return SafetyVerdict(
+        allowed=False,
+        risk=RiskLevel.CRITICAL,
+        reason="Command matches a blocked destructive pattern.",
+    )
+
+
+def _current_verdict(command: str) -> SafetyVerdict:
+    """Safety assessment as of now, without spending a rate-limit slot."""
+    if _BLOCKED_PATTERNS.search(command):
+        return _denylist_verdict()
+    return assess_command(command)
+
+
 def _pre_flight(command: str) -> SafetyVerdict:
     """Run safety checks before executing any command."""
     if _BLOCKED_PATTERNS.search(command):
         _execution_stats["blocked"] += 1
-        return SafetyVerdict(
-            allowed=False,
-            risk=RiskLevel.CRITICAL,
-            reason="Command matches a blocked destructive pattern.",
-        )
+        return _denylist_verdict()
 
     if not _rate_limiter.check(current_task_id()):
         _execution_stats["rate_limited"] += 1
@@ -220,6 +240,72 @@ def _pre_flight(command: str) -> SafetyVerdict:
     return verdict
 
 
+def _brake_state() -> tuple[str, list[str]]:
+    """The policy holding the brake, as an authority string plus every brake."""
+    from kopilot.executor.autonomy import get_engine
+
+    brakes = list(get_engine().snapshot().get("brakes") or [])
+    return (f"policy:{brakes[0]}" if brakes else "policy:autonomy-level-0"), brakes
+
+
+def _record_brake(
+    command: str, tool_name: str, stage: str, risk: str, approval_id: str = ""
+) -> None:
+    authority, brakes = _brake_state()
+    record_command_event(
+        command,
+        tool_name,
+        Decision.BRAKED,
+        authority,
+        policy_ref=brakes[0] if brakes else None,
+        context={
+            "stage": stage,
+            "risk": risk,
+            "tool": tool_name,
+            "brakes": brakes,
+            "approval_id": approval_id or None,
+        },
+    )
+
+
+async def _run_and_record(
+    command: str,
+    tool_name: str,
+    authority: str,
+    *,
+    stage: str = "execution_result",
+    policy_ref: str | None = None,
+    approval_id: str = "",
+) -> str:
+    """Execute a command and ledger its result under the deciding authority."""
+    context: dict = {
+        "stage": stage,
+        "tool": tool_name,
+        "approval_id": approval_id or None,
+    }
+    try:
+        output = await _exec(command)
+    except CommandTimeoutError as e:
+        record_command_event(
+            command, tool_name, Decision.OBSERVED, authority,
+            policy_ref=policy_ref,
+            context={**context, "outcome": "timeout", "error": str(e)},
+        )
+        return f"ERROR: {e}"
+
+    record_command_event(
+        command, tool_name, Decision.OBSERVED, authority,
+        policy_ref=policy_ref,
+        context={
+            **context,
+            "outcome": "completed",
+            "output_sha256": sha256_hex(output),
+            "output_bytes": len(output),
+        },
+    )
+    return output
+
+
 async def _guarded_run(command: str, tool_name: str) -> str:
     """Common safety pipeline + execution for the kubectl/helm/shell tools."""
     from kopilot.executor.autonomy import AutonomyDecision, get_engine
@@ -230,7 +316,8 @@ async def _guarded_run(command: str, tool_name: str) -> str:
         command, tool_name, verdict.risk, verdict.requires_approval
     )
     if decision is AutonomyDecision.REFUSE:
-        log_event("executor.observe_refused", command=command[:200], tool=tool_name)
+        log_event("executor.observe_refused", command=redact_command(command)[:200], tool=tool_name)
+        _record_brake(command, tool_name, "observe_refused", verdict.risk.value)
         return (
             "OBSERVE MODE (autonomy level 0): mutating commands are refused. "
             "Report what you would have done instead."
@@ -247,14 +334,18 @@ async def _guarded_run(command: str, tool_name: str) -> str:
         )
         log_event(
             f"executor.{tool_name}.auto_approved",
-            command=command[:200],
+            command=redact_command(command)[:200],
             approval_id=record.id,
             policy=policy,
         )
-        try:
-            return await _exec(command)
-        except CommandTimeoutError as e:
-            return f"ERROR: {e}"
+        return await _run_and_record(
+            command,
+            tool_name,
+            f"policy:{policy}",
+            stage="autopilot_execution_result",
+            policy_ref=policy,
+            approval_id=record.id,
+        )
 
     if verdict.requires_approval:
         store = get_approval_store()
@@ -262,18 +353,25 @@ async def _guarded_run(command: str, tool_name: str) -> str:
         if approved is not None:
             log_event(
                 f"executor.{tool_name}.approved",
-                command=command[:200],
+                command=redact_command(command)[:200],
                 approval_id=approved.id,
             )
-            try:
-                return await _exec(command)
-            except CommandTimeoutError as e:
-                return f"ERROR: {e}"
+            return await _run_and_record(
+                command,
+                tool_name,
+                authority_for(approved.decided_by),
+                stage="approved_execution_result",
+                approval_id=approved.id,
+            )
 
         req = store.request(
             command=command, tool=tool_name, reason=verdict.reason, risk=verdict.risk.value
         )
-        log_event("executor.approval_required", command=command[:200], approval_id=req.id)
+        log_event(
+            "executor.approval_required",
+            command=redact_command(command)[:200],
+            approval_id=req.id,
+        )
         return (
             f"APPROVAL REQUIRED ({verdict.risk.value}): {verdict.reason} "
             f"A pending approval request was created with id '{req.id}'. "
@@ -283,28 +381,115 @@ async def _guarded_run(command: str, tool_name: str) -> str:
         )
 
     if not verdict.allowed:
-        log_event("executor.blocked", command=command[:200], reason=verdict.reason)
+        log_event("executor.blocked", command=redact_command(command)[:200], reason=verdict.reason)
+        record_command_event(
+            command,
+            tool_name,
+            Decision.DENIED,
+            SAFETY_AUTHORITY,
+            context={
+                "stage": "safety_blocked",
+                "risk": verdict.risk.value,
+                "tool": tool_name,
+                "reason": verdict.reason,
+            },
+        )
         return f"BLOCKED ({verdict.risk.value}): {verdict.reason}"
 
-    log_event(f"executor.{tool_name}", command=command[:200])
-    try:
-        return await _exec(command)
-    except CommandTimeoutError as e:
-        return f"ERROR: {e}"
+    log_event(f"executor.{tool_name}", command=redact_command(command)[:200])
+    return await _run_and_record(command, tool_name, SAFETY_AUTHORITY)
 
 
-async def execute_approved(req) -> str:
-    """Run the exact command a human just approved, with full audit."""
+@dataclass
+class ApprovedExecution:
+    """Outcome of running a command that was approved earlier."""
+
+    executed: bool
+    output: str
+
+
+async def execute_approved(req) -> ApprovedExecution:
+    """Run the exact command a human approved, re-checked at execution time.
+
+    An approval is a decision about the past; the brake and the safety
+    assessment are facts about now.  Both are re-evaluated here, so an
+    approval issued before an emergency brake engaged refuses instead of
+    running, and the refusal is written to the ledger like any other decision.
+    """
+    from kopilot.executor.autonomy import AutonomyDecision, get_engine
+
+    verdict = _current_verdict(req.command)
+    decision = get_engine().decide(
+        req.command, req.tool, verdict.risk, verdict.requires_approval
+    )
+
+    if decision is AutonomyDecision.REFUSE:
+        _execution_stats["brake_refused"] += 1
+        log_event(
+            "executor.approved_refused_by_brake",
+            command=redact_command(req.command)[:200],
+            approval_id=req.id,
+        )
+        _record_brake(
+            req.command, req.tool, "approved_execution_refused", verdict.risk.value, req.id
+        )
+        _, brakes = _brake_state()
+        held_by = ", ".join(brakes) or "autonomy level 0"
+        return ApprovedExecution(
+            executed=False,
+            output=(
+                f"REFUSED: the emergency brake ({held_by}) engaged after this approval "
+                f"was granted. The command was not run; clear the brake and request "
+                f"approval again."
+            ),
+        )
+
+    blocked_now = not verdict.allowed and (
+        not verdict.requires_approval or verdict.risk is RiskLevel.CRITICAL
+    )
+    if blocked_now:
+        _execution_stats["blocked"] += 1
+        log_event(
+            "executor.approved_blocked",
+            command=redact_command(req.command)[:200],
+            approval_id=req.id,
+            reason=verdict.reason,
+        )
+        record_command_event(
+            req.command,
+            req.tool,
+            Decision.DENIED,
+            SAFETY_AUTHORITY,
+            context={
+                "stage": "approved_execution_blocked",
+                "risk": verdict.risk.value,
+                "tool": req.tool,
+                "approval_id": req.id,
+                "reason": verdict.reason,
+            },
+        )
+        return ApprovedExecution(
+            executed=False,
+            output=(
+                f"BLOCKED ({verdict.risk.value}): {verdict.reason} The safety assessment "
+                f"changed after this approval was granted; the command was not run."
+            ),
+        )
+
     log_event(
         "executor.approved_via_api",
-        command=req.command[:200],
+        command=redact_command(req.command)[:200],
         approval_id=req.id,
         by=req.decided_by,
     )
-    try:
-        return await _exec(req.command)
-    except CommandTimeoutError as e:
-        return f"ERROR: {e}"
+    output = await _run_and_record(
+        req.command,
+        req.tool,
+        authority_for(req.decided_by),
+        stage="approved_execution_result",
+        approval_id=req.id,
+    )
+    return ApprovedExecution(executed=True, output=output)
 
 
 @tool
