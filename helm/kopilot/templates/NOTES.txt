@@ -1,19 +1,32 @@
 Kopilot has been deployed.
 
-1. Get the API endpoint:
-  {{- if eq .Values.service.type "ClusterIP" }}
-  kubectl port-forward svc/{{ include "kopilot.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }} -n {{ .Release.Namespace }}
-  {{- end }}
+1. Read the API bearer token (every task, history, metrics and approval
+   endpoint requires it):
+{{- if .Values.existingSecret }}
+  kubectl get secret {{ .Values.existingSecret }} -n {{ .Release.Namespace }} -o jsonpath='{.data.API_AUTH_TOKEN}' | base64 -d
+{{- else }}
+  export KOPILOT_TOKEN=$(kubectl get secret {{ include "kopilot.fullname" . }}-secrets -n {{ .Release.Namespace }} -o jsonpath='{.data.API_AUTH_TOKEN}' | base64 -d)
+{{- end }}
 
-2. Check agent health:
+2. Reach the API. The Service is {{ .Values.service.type }}; port-forward it
+   rather than exposing it:
+  kubectl port-forward svc/{{ include "kopilot.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+
+3. Check agent health:
   curl http://localhost:{{ .Values.service.port }}/health
 
-3. Submit a task:
+4. Submit a task:
   curl -X POST http://localhost:{{ .Values.service.port }}/tasks \
+    -H "Authorization: Bearer $KOPILOT_TOKEN" \
     -H "Content-Type: application/json" \
     -d '{"prompt": "List all pods in default namespace"}'
 
-4. Create a task via CRD:
+5. Approve what it wants to change. At autonomy level {{ .Values.autonomy.level }},
+   every mutating command waits for a human:
+  curl -H "Authorization: Bearer $KOPILOT_TOKEN" http://localhost:{{ .Values.service.port }}/approvals
+  curl -X POST -H "Authorization: Bearer $KOPILOT_TOKEN" http://localhost:{{ .Values.service.port }}/approvals/<id>/approve
+
+6. Create a task via CRD:
   cat <<EOF | kubectl apply -f -
   apiVersion: kopilot-ai.github.io/v1alpha1
   kind: AITask
@@ -23,8 +36,16 @@ Kopilot has been deployed.
     prompt: "Check cluster health and report any issues"
   EOF
 
-5. View skills:
-  curl http://localhost:{{ .Values.service.port }}/skills
-
 LLM provider: {{ .Values.llm.provider }} (model: {{ .Values.llm.model }})
 Enabled skills: {{ .Values.enabledSkills }}
+{{- if not .Values.rbac.extendedWrite }}
+
+RBAC is on the default tier: reads plus create/update/patch on Deployments and
+StatefulSets. Deletions, pod creation, and namespace/serviceaccount writes are
+refused by the API server until you set rbac.extendedWrite=true.
+{{- end }}
+{{- if .Values.watchers.k8sEvents.enabled }}
+
+WARNING: watchers.k8sEvents.enabled is on. Cluster event messages are
+attacker-controllable text that this build feeds directly into an LLM prompt.
+{{- end }}

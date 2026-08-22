@@ -1,6 +1,7 @@
 # Kopilot runs a single replica: conversation state and the approval queue
 # are in-process. Running more than one replica would split the approval
-# queue and double-process AITask resources.
+# queue and double-process AITask resources, so the chart refuses to render
+# with replicaCount > 1 rather than deploying something quietly broken.
 replicaCount: 1
 
 image:
@@ -12,6 +13,19 @@ image:
 serviceAccount:
   create: true
   name: kopilot
+
+# RBAC tiers. The default ClusterRole is read-most plus the few workload write
+# verbs the shipped administration skill actually issues. Both flags below are
+# off by default and each one widens real blast radius — read the comments in
+# templates/clusterrole.yaml before turning either on.
+rbac:
+  # Cluster-wide Secret reads. No shipped skill needs one, and enabling it
+  # lets the agent put credential material into an LLM prompt.
+  extendedRead: false
+  # create/update/patch/delete on pods, namespaces, serviceaccounts,
+  # daemonsets, jobs, and delete on workloads. Required by the networking
+  # skill's `kubectl run tmp --rm` probe and by any approved deletion.
+  extendedWrite: false
 
 # LLM configuration
 llm:
@@ -56,8 +70,12 @@ api:
   host: "0.0.0.0"
   port: 8080
   # Bearer token required on /tasks, /tasks/history, /metrics and /approvals.
-  # Strongly recommended. Ignored when existingSecret is set (put
-  # API_AUTH_TOKEN in the secret instead).
+  # Leave empty and the chart generates a 32-character token on first install
+  # and carries it forward on every upgrade (it re-reads the live Secret), so
+  # the API is never unauthenticated by default. Set a value to pin your own.
+  # Ignored when existingSecret is set (put API_AUTH_TOKEN in that secret).
+  # Read the generated token with:
+  #   kubectl get secret <release>-kopilot-secrets -o jsonpath='{.data.API_AUTH_TOKEN}' | base64 -d
   authToken: ""
   # HMAC secret for POST /webhook (webhooks stay disabled when empty).
   webhookSecret: ""
@@ -73,6 +91,9 @@ slack:
 
 # Safety guardrails
 safety:
+  # Master approval switch. Gates every *mutating* command, not only the
+  # destructive ones; the key name is kept for compatibility. Turning it off
+  # lets the agent change cluster state with no human in the loop.
   requireApprovalDestructive: "true"
   maxConcurrentTasks: "5"
   protectedNamespaces: '["kube-system","kube-public","kube-node-lease"]'
@@ -87,6 +108,16 @@ autonomy:
   # JSON list, e.g. '["staging","qa"]' — required when level is 2
   autopilotNamespaces: "[]"
 
+# Input watchers.
+watchers:
+  k8sEvents:
+    # Turns cluster Warning events into agent prompts. Off by default: an
+    # event's reason and message are attacker-controllable strings (anyone who
+    # can create a Pod can create an event) and this watcher feeds them
+    # straight into an LLM prompt. That is a prompt-injection surface, and it
+    # stays opt-in until the input is treated as untrusted end to end.
+    enabled: false
+
 # Built-in skills to enable (loaded from YAML definitions at startup)
 enabledSkills: '["security","administration","networking","monitoring","troubleshooting","cost_optimization"]'
 
@@ -94,12 +125,15 @@ enabledSkills: '["security","administration","networking","monitoring","troubles
 # It is mounted at /etc/kopilot/skills and SKILL_DIRS is set accordingly.
 customSkillsConfigMap: ""
 
-# Approval queue durability. The store is written to /data/approvals.db so
-# pending approvals survive container restarts. By default /data is an
-# emptyDir (survives container restarts, not pod deletion); enable
-# persistence for a PVC that survives pod rescheduling.
+# Approval queue durability. The store is written to /data/approvals.db.
+# Persistence is ON by default: an emptyDir loses every pending approval when
+# the pod is rescheduled, and a silently emptied approval queue is worse than
+# a failed install. The PVC carries helm.sh/resource-policy: keep, so
+# `helm uninstall` leaves the audit trail behind. With persistence on, the
+# Deployment uses strategy Recreate — a ReadWriteOnce volume cannot be held by
+# an old and a new pod at once.
 persistence:
-  enabled: false
+  enabled: true
   size: 1Gi
   storageClass: ""
   accessModes: ["ReadWriteOnce"]

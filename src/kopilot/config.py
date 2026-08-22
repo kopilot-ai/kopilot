@@ -96,6 +96,9 @@ class SlackSettings(BaseSettings):
 class SafetySettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="SAFETY_", extra="ignore")
 
+    # Master approval switch. Every *mutating* command is gated when this is
+    # on, not only the destructive ones — the name is kept for compatibility
+    # with existing SAFETY_REQUIRE_APPROVAL_DESTRUCTIVE deployments.
     require_approval_destructive: bool = True
     max_concurrent_tasks: int = 5
     protected_namespaces: list[str] = [
@@ -112,11 +115,21 @@ class AutonomySettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="AUTONOMY_", extra="ignore")
 
     # 0 = observe (mutations refused), 1 = copilot (approval-gated, default),
-    # 2 = autopilot in the namespaces below.
-    level: int = 1
+    # 2 = autopilot in the namespaces below. Bounded so a negative value
+    # cannot land outside the dial and silently disable observe mode.
+    level: int = Field(default=1, ge=0, le=2)
     # Namespaces the env-level autopilot grant covers (level 2 only).
     # CRITICAL commands and opaque payloads are never auto-approved.
     autopilot_namespaces: list[str] = []
+
+
+class WatcherSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="WATCHERS_", extra="ignore")
+
+    # The Kubernetes event watcher turns cluster events into agent prompts,
+    # which makes every event message an untrusted input to the LLM. Off until
+    # that surface is hardened; opt in with WATCHERS_K8S_EVENTS_ENABLED=true.
+    k8s_events_enabled: bool = False
 
 
 class ApprovalSettings(BaseSettings):
@@ -154,6 +167,7 @@ class Settings(BaseSettings):
     safety: SafetySettings = Field(default_factory=SafetySettings)
     approvals: ApprovalSettings = Field(default_factory=ApprovalSettings)
     autonomy: AutonomySettings = Field(default_factory=AutonomySettings)
+    watchers: WatcherSettings = Field(default_factory=WatcherSettings)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
 
     enabled_skills: list[str] = [

