@@ -26,6 +26,7 @@ def auth_client(monkeypatch):
     """Client for an app with bearer auth enabled."""
     monkeypatch.setenv("API_AUTH_TOKEN", "sekrit-token")
     import kopilot.config as cfg_mod
+
     cfg_mod._settings = None
     return TestClient(create_app())
 
@@ -35,6 +36,7 @@ def webhook_client(monkeypatch):
     """Client for an app with the webhook secret configured."""
     monkeypatch.setenv("API_WEBHOOK_SECRET", WEBHOOK_SECRET)
     import kopilot.config as cfg_mod
+
     cfg_mod._settings = None
     return TestClient(create_app())
 
@@ -101,13 +103,15 @@ def test_task_history_empty(client):
 
 
 def test_submit_task(client, monkeypatch):
-    mock = AsyncMock(return_value={
-        "task_id": "t-1",
-        "answer": "All healthy.",
-        "risk_level": "low",
-        "elapsed_ms": 42,
-        "attempts": 1,
-    })
+    mock = AsyncMock(
+        return_value={
+            "task_id": "t-1",
+            "answer": "All healthy.",
+            "risk_level": "low",
+            "elapsed_ms": 42,
+            "attempts": 1,
+        }
+    )
     monkeypatch.setattr(api_module, "run_task", mock)
     resp = client.post("/tasks", json={"prompt": "check pods"})
     assert resp.status_code == 200
@@ -117,13 +121,15 @@ def test_submit_task(client, monkeypatch):
 
 
 def test_submit_task_with_reflect(client, monkeypatch):
-    mock = AsyncMock(return_value={
-        "task_id": "t-r",
-        "answer": "Reflected response.",
-        "risk_level": "low",
-        "elapsed_ms": 100,
-        "attempts": 2,
-    })
+    mock = AsyncMock(
+        return_value={
+            "task_id": "t-r",
+            "answer": "Reflected response.",
+            "risk_level": "low",
+            "elapsed_ms": 100,
+            "attempts": 2,
+        }
+    )
     monkeypatch.setattr(api_module, "run_task", mock)
     resp = client.post("/tasks", json={"prompt": "check pods", "reflect": True})
     assert resp.status_code == 200
@@ -153,16 +159,12 @@ def test_auth_required_when_token_set(auth_client):
 
 
 def test_auth_wrong_token_rejected(auth_client):
-    resp = auth_client.get(
-        "/tasks/history", headers={"Authorization": "Bearer wrong-token"}
-    )
+    resp = auth_client.get("/tasks/history", headers={"Authorization": "Bearer wrong-token"})
     assert resp.status_code == 401
 
 
 def test_auth_valid_token_accepted(auth_client):
-    resp = auth_client.get(
-        "/tasks/history", headers={"Authorization": "Bearer sekrit-token"}
-    )
+    resp = auth_client.get("/tasks/history", headers={"Authorization": "Bearer sekrit-token"})
     assert resp.status_code == 200
 
 
@@ -181,24 +183,28 @@ def test_webhook_disabled_without_secret(client):
 def test_webhook_rejects_bad_signature(webhook_client):
     body = json.dumps({"source": "servicenow", "payload": {"prompt": "hi"}}).encode()
     resp = webhook_client.post(
-        "/webhook", content=body,
+        "/webhook",
+        content=body,
         headers={"X-Kopilot-Signature": "sha256=deadbeef", "Content-Type": "application/json"},
     )
     assert resp.status_code == 401
 
 
 def test_webhook_valid_signature(webhook_client, monkeypatch):
-    mock = AsyncMock(return_value={
-        "task_id": "t-2",
-        "answer": "Resolved.",
-        "risk_level": "low",
-        "elapsed_ms": 55,
-        "attempts": 1,
-    })
+    mock = AsyncMock(
+        return_value={
+            "task_id": "t-2",
+            "answer": "Resolved.",
+            "risk_level": "low",
+            "elapsed_ms": 55,
+            "attempts": 1,
+        }
+    )
     monkeypatch.setattr(api_module, "run_task", mock)
     body = json.dumps({"source": "servicenow", "payload": {"prompt": "Pod crash"}}).encode()
     resp = webhook_client.post(
-        "/webhook", content=body,
+        "/webhook",
+        content=body,
         headers={"X-Kopilot-Signature": _sign(body), "Content-Type": "application/json"},
     )
     assert resp.status_code == 200
@@ -208,7 +214,8 @@ def test_webhook_valid_signature(webhook_client, monkeypatch):
 def test_webhook_missing_prompt(webhook_client):
     body = json.dumps({"source": "test", "payload": {}}).encode()
     resp = webhook_client.post(
-        "/webhook", content=body,
+        "/webhook",
+        content=body,
         headers={"X-Kopilot-Signature": _sign(body), "Content-Type": "application/json"},
     )
     assert resp.status_code == 400
@@ -222,8 +229,10 @@ def test_approvals_flow(client, mock_subprocess):
 
     store = get_approval_store()
     req = store.request(
-        command="kubectl delete pod x -n staging", tool="kubectl",
-        reason="destructive", risk="high",
+        command="kubectl delete pod x -n staging",
+        tool="kubectl",
+        reason="destructive",
+        risk="high",
     )
 
     listed = client.get("/approvals").json()
@@ -243,8 +252,10 @@ def test_approvals_deny(client):
     from kopilot.executor.approvals import get_approval_store
 
     req = get_approval_store().request(
-        command="helm uninstall prod-release", tool="helm",
-        reason="destructive", risk="high",
+        command="helm uninstall prod-release",
+        tool="helm",
+        reason="destructive",
+        risk="high",
     )
     resp = client.post(f"/approvals/{req.id}/deny")
     assert resp.status_code == 200
@@ -274,7 +285,9 @@ def test_approve_executes_the_signed_command(auth_client, mock_subprocess):
 
     req = get_approval_store().request(
         "kubectl scale deployment sleeper -n e2e --replicas=1",
-        "kubectl", "destructive", "high",
+        "kubectl",
+        "destructive",
+        "high",
     )
     r = auth_client.post(
         f"/approvals/{req.id}/approve",

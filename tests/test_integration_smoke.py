@@ -45,9 +45,11 @@ class TestOllamaSmoke:
         monkeypatch.setenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
         import kopilot.config as cfg_mod
+
         cfg_mod._settings = None
 
         from kopilot.agent.llm import get_chat_model, reset_chat_model
+
         reset_chat_model()
         model = get_chat_model()
         assert model is not None
@@ -58,6 +60,7 @@ class TestOllamaSmoke:
         monkeypatch.setenv("LLM_MODEL", "qwen3:8b")
 
         import kopilot.config as cfg_mod
+
         cfg_mod._settings = None
 
         from langchain_core.messages import HumanMessage
@@ -81,9 +84,11 @@ class TestGeminiSmoke:
         monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash")
 
         import kopilot.config as cfg_mod
+
         cfg_mod._settings = None
 
         from kopilot.agent.llm import get_chat_model, reset_chat_model
+
         reset_chat_model()
         model = get_chat_model()
         assert "Google" in type(model).__name__
@@ -95,6 +100,7 @@ class TestGeminiSmoke:
         monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash")
 
         import kopilot.config as cfg_mod
+
         cfg_mod._settings = None
 
         from langchain_core.messages import HumanMessage
@@ -124,9 +130,7 @@ class TestK8sSmoke:
     async def test_kubectl_get_pods_all_ns(self):
         from kopilot.executor.middleware import run_kubectl
 
-        result = await run_kubectl.ainvoke(
-            {"command": "kubectl get pods -A --no-headers"}
-        )
+        result = await run_kubectl.ainvoke({"command": "kubectl get pods -A --no-headers"})
         assert "kube-system" in result or "No resources" in result
 
     @pytest.mark.asyncio
@@ -160,6 +164,7 @@ class TestEndToEnd:
         monkeypatch.setenv("SAFETY_REQUIRE_APPROVAL_DESTRUCTIVE", "true")
 
         import kopilot.config as cfg_mod
+
         cfg_mod._settings = None
 
         from kopilot.agent.llm import reset_chat_model

@@ -18,7 +18,6 @@ from langgraph.checkpoint.memory import MemorySaver
 logger = structlog.get_logger(__name__)
 
 
-
 @dataclass
 class TaskContext:
     """Rich context attached to a single agent task."""
@@ -28,9 +27,7 @@ class TaskContext:
     user: str = "system"
     namespace: str | None = None
     cluster_state: dict[str, Any] = field(default_factory=dict)
-    created_at: str = field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -46,9 +43,7 @@ class IncidentMemory:
     resource_kind: str = ""
     resource_name: str = ""
     resolved: bool = False
-    created_at: str = field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     score: float = 0.0
 
 

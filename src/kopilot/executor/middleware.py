@@ -287,14 +287,20 @@ async def _run_and_record(
         output = await _exec(command)
     except CommandTimeoutError as e:
         record_command_event(
-            command, tool_name, Decision.OBSERVED, authority,
+            command,
+            tool_name,
+            Decision.OBSERVED,
+            authority,
             policy_ref=policy_ref,
             context={**context, "outcome": "timeout", "error": str(e)},
         )
         return f"ERROR: {e}"
 
     record_command_event(
-        command, tool_name, Decision.OBSERVED, authority,
+        command,
+        tool_name,
+        Decision.OBSERVED,
+        authority,
         policy_ref=policy_ref,
         context={
             **context,
@@ -312,9 +318,7 @@ async def _guarded_run(command: str, tool_name: str) -> str:
 
     verdict = _pre_flight(command)
 
-    decision = get_engine().decide(
-        command, tool_name, verdict.risk, verdict.requires_approval
-    )
+    decision = get_engine().decide(command, tool_name, verdict.risk, verdict.requires_approval)
     if decision is AutonomyDecision.REFUSE:
         log_event("executor.observe_refused", command=redact_command(command)[:200], tool=tool_name)
         _record_brake(command, tool_name, "observe_refused", verdict.risk.value)
@@ -419,9 +423,7 @@ async def execute_approved(req) -> ApprovedExecution:
     from kopilot.executor.autonomy import AutonomyDecision, get_engine
 
     verdict = _current_verdict(req.command)
-    decision = get_engine().decide(
-        req.command, req.tool, verdict.risk, verdict.requires_approval
-    )
+    decision = get_engine().decide(req.command, req.tool, verdict.risk, verdict.requires_approval)
 
     if decision is AutonomyDecision.REFUSE:
         _execution_stats["brake_refused"] += 1
@@ -578,9 +580,7 @@ async def read_resource(path_or_url: str) -> str:
     import pathlib
 
     allowed_roots = [
-        pathlib.Path(root).resolve()
-        for root in get_settings().safety.read_paths
-        if root.strip()
+        pathlib.Path(root).resolve() for root in get_settings().safety.read_paths if root.strip()
     ]
     try:
         p = pathlib.Path(path_or_url).resolve()

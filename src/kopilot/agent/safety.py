@@ -44,11 +44,24 @@ _HELM_DESTRUCTIVE_VERBS = frozenset({"uninstall", "delete", "rollback"})
 # and `whoami`), and `helm template`/`helm lint` (`--post-renderer` executes an
 # arbitrary binary).
 
-_KUBECTL_READ_VERBS = frozenset({
-    "get", "describe", "logs", "top", "explain", "events", "diff", "wait",
-    "api-resources", "api-versions", "cluster-info", "version", "auth",
-    "rollout",
-})
+_KUBECTL_READ_VERBS = frozenset(
+    {
+        "get",
+        "describe",
+        "logs",
+        "top",
+        "explain",
+        "events",
+        "diff",
+        "wait",
+        "api-resources",
+        "api-versions",
+        "cluster-info",
+        "version",
+        "auth",
+        "rollout",
+    }
+)
 
 # Verbs that read only for certain subcommands. `kubectl auth reconcile`
 # writes RBAC; `kubectl rollout undo/restart/pause/resume` change workloads.
@@ -57,20 +70,66 @@ _SUBCOMMAND_READ_VERBS = {
     "rollout": frozenset({"status", "history"}),
 }
 
-_HELM_READ_VERBS = frozenset({
-    "list", "status", "get", "history", "show", "search", "version", "env",
-})
+_HELM_READ_VERBS = frozenset(
+    {
+        "list",
+        "status",
+        "get",
+        "history",
+        "show",
+        "search",
+        "version",
+        "env",
+    }
+)
 
 # Shell utilities that only read.  `awk` and `sed` are deliberately absent:
 # awk has system(), sed has -i.  `xargs`, `base64`, `sh`, `bash`, `eval` and
 # friends are absent because they run whatever they are handed.
-_SHELL_READ_COMMANDS = frozenset({
-    "cat", "head", "tail", "grep", "egrep", "fgrep", "sort", "uniq", "wc",
-    "cut", "tr", "jq", "yq", "column", "nl", "rev", "echo", "printf", "date",
-    "ls", "stat", "file", "hostname", "uname", "id", "whoami", "which",
-    "env", "printenv", "ps", "df", "du", "free", "uptime",
-    "dig", "nslookup", "host", "ping", "traceroute", "curl",
-})
+_SHELL_READ_COMMANDS = frozenset(
+    {
+        "cat",
+        "head",
+        "tail",
+        "grep",
+        "egrep",
+        "fgrep",
+        "sort",
+        "uniq",
+        "wc",
+        "cut",
+        "tr",
+        "jq",
+        "yq",
+        "column",
+        "nl",
+        "rev",
+        "echo",
+        "printf",
+        "date",
+        "ls",
+        "stat",
+        "file",
+        "hostname",
+        "uname",
+        "id",
+        "whoami",
+        "which",
+        "env",
+        "printenv",
+        "ps",
+        "df",
+        "du",
+        "free",
+        "uptime",
+        "dig",
+        "nslookup",
+        "host",
+        "ping",
+        "traceroute",
+        "curl",
+    }
+)
 
 # curl reads only while it is not asked to write a file, change method, or
 # carry a body.
@@ -83,15 +142,41 @@ _CURL_WRITE_FLAG_PAT = re.compile(
 # Flags that consume the following token, so the verb scanner does not mistake
 # a flag's value for the command verb.  An unlisted value-taking flag makes the
 # scanner read the value as the verb, which fails the allowlist — fail closed.
-_VALUE_FLAGS = frozenset({
-    "-n", "--namespace", "--context", "--cluster", "--user", "--kubeconfig",
-    "--server", "-s", "--token", "--as", "--as-group", "--as-uid",
-    "--request-timeout", "--cache-dir", "--certificate-authority",
-    "--client-certificate", "--client-key", "--tls-server-name",
-    "--username", "--password", "-v", "--v", "--log-flush-frequency",
-    "--profile", "--profile-output", "--registry-config", "--repository-config",
-    "--repository-cache", "--kube-context", "--burst-limit", "--qps",
-})
+_VALUE_FLAGS = frozenset(
+    {
+        "-n",
+        "--namespace",
+        "--context",
+        "--cluster",
+        "--user",
+        "--kubeconfig",
+        "--server",
+        "-s",
+        "--token",
+        "--as",
+        "--as-group",
+        "--as-uid",
+        "--request-timeout",
+        "--cache-dir",
+        "--certificate-authority",
+        "--client-certificate",
+        "--client-key",
+        "--tls-server-name",
+        "--username",
+        "--password",
+        "-v",
+        "--v",
+        "--log-flush-frequency",
+        "--profile",
+        "--profile-output",
+        "--registry-config",
+        "--repository-config",
+        "--repository-cache",
+        "--kube-context",
+        "--burst-limit",
+        "--qps",
+    }
+)
 
 # Verbs whose payload the gate cannot inspect. They are approval-gated rather
 # than blocked outright, since `kubectl exec` is a normal diagnostic tool.
@@ -217,7 +302,7 @@ def _leading_verb(tokens: list[str]) -> tuple[str | None, list[str]]:
         if tok.startswith("-"):
             i += 2 if (tok in _VALUE_FLAGS and "=" not in tok) else 1
             continue
-        return tok, tokens[i + 1:]
+        return tok, tokens[i + 1 :]
     return None, []
 
 
@@ -314,9 +399,7 @@ def is_opaque(command: str) -> bool:
     segments = _split_pipeline(normalized)
     if segments is None or not segments:
         return True
-    return not all(
-        _segment_is_read(s) or _segment_is_known_mutation(s) for s in segments
-    )
+    return not all(_segment_is_read(s) or _segment_is_known_mutation(s) for s in segments)
 
 
 def _protected_ns_hit(command: str, protected: list[str]) -> str | None:

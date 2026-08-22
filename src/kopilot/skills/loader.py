@@ -62,6 +62,7 @@ def discover_skills() -> list[SkillDefinition]:
 
     dirs = [BUILTIN_DIR]
     import os
+
     separator = ";" if os.name == "nt" else ":"
     for extra in os.environ.get(EXTRA_SKILL_DIRS_ENV, "").split(separator):
         extra = extra.strip()

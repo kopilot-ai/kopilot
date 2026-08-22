@@ -45,10 +45,10 @@ _AUTOPILOT_TOOLS = {"kubectl", "helm"}
 
 
 class AutonomyDecision(Enum):
-    ALLOW = auto()          # run without ceremony (reads at any level)
-    GATE = auto()           # create a pending approval (copilot)
-    AUTO_APPROVE = auto()   # execute now, audited as policy-approved
-    REFUSE = auto()         # observe mode: mutation refused outright
+    ALLOW = auto()  # run without ceremony (reads at any level)
+    GATE = auto()  # create a pending approval (copilot)
+    AUTO_APPROVE = auto()  # execute now, audited as policy-approved
+    REFUSE = auto()  # observe mode: mutation refused outright
 
 
 @dataclass
@@ -86,9 +86,7 @@ class AutonomyEngine:
     def set_grant(self, grant: AutopilotGrant) -> None:
         with self._lock:
             self._grants[grant.name] = grant
-        logger.info(
-            "autonomy.grant_set", policy=grant.name, namespaces=grant.namespaces
-        )
+        logger.info("autonomy.grant_set", policy=grant.name, namespaces=grant.namespaces)
 
     def remove_grant(self, name: str) -> None:
         with self._lock:
@@ -112,8 +110,7 @@ class AutonomyEngine:
                 "observe": self._observe_locked(),
                 "brakes": sorted(self._brakes),
                 "grants": [
-                    {"name": g.name, "namespaces": g.namespaces}
-                    for g in self._grants.values()
+                    {"name": g.name, "namespaces": g.namespaces} for g in self._grants.values()
                 ],
             }
 

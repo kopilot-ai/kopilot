@@ -35,6 +35,7 @@ def test_gemini_settings_from_env(monkeypatch):
     monkeypatch.setenv("GEMINI_MODEL", "gemini-pro")
 
     from kopilot.config import GeminiSettings
+
     gs = GeminiSettings()
     assert gs.api_key == "test-key-123"
     assert gs.model == "gemini-pro"

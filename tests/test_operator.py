@@ -28,12 +28,14 @@ async def test_aitask_create_missing_prompt():
 async def test_aitask_create_success():
     from kopilot.operator.handlers import on_aitask_create
 
-    mock_run = AsyncMock(return_value={
-        "task_id": "t-1",
-        "answer": "All good.",
-        "risk_level": "low",
-        "elapsed_ms": 100,
-    })
+    mock_run = AsyncMock(
+        return_value={
+            "task_id": "t-1",
+            "answer": "All good.",
+            "risk_level": "low",
+            "elapsed_ms": 100,
+        }
+    )
 
     patch_obj = MockPatch()
     with patch("kopilot.agent.supervisor.run_task", mock_run):
@@ -84,8 +86,11 @@ async def test_aitask_idempotent_on_retry():
     existing_status = {"phase": "Completed", "specHash": _spec_hash(spec)}
     with patch("kopilot.agent.supervisor.run_task", mock_run):
         await on_aitask_create(
-            spec=spec, name="done-task", namespace="default",
-            patch=patch_obj, status=existing_status,
+            spec=spec,
+            name="done-task",
+            namespace="default",
+            patch=patch_obj,
+            status=existing_status,
         )
 
     mock_run.assert_not_awaited()
@@ -96,16 +101,24 @@ async def test_aitask_idempotent_on_retry():
 async def test_aitask_update_reruns_on_spec_change():
     from kopilot.operator.handlers import _spec_hash, on_aitask_update
 
-    mock_run = AsyncMock(return_value={
-        "task_id": "t-2", "answer": "Rerun done.", "risk_level": "low", "elapsed_ms": 5,
-    })
+    mock_run = AsyncMock(
+        return_value={
+            "task_id": "t-2",
+            "answer": "Rerun done.",
+            "risk_level": "low",
+            "elapsed_ms": 5,
+        }
+    )
 
     patch_obj = MockPatch()
     old_status = {"phase": "Completed", "specHash": _spec_hash({"prompt": "old prompt"})}
     with patch("kopilot.agent.supervisor.run_task", mock_run):
         await on_aitask_update(
-            spec={"prompt": "new prompt"}, name="task", namespace="default",
-            patch=patch_obj, status=old_status,
+            spec={"prompt": "new prompt"},
+            name="task",
+            namespace="default",
+            patch=patch_obj,
+            status=old_status,
         )
 
     mock_run.assert_awaited_once()
@@ -122,7 +135,11 @@ async def test_condition_transition_time_stable():
     first = patch_obj.status["conditions"][0]["lastTransitionTime"]
 
     _set_condition(
-        patch_obj, "Ready", "True", "Completed", "done again",
+        patch_obj,
+        "Ready",
+        "True",
+        "Completed",
+        "done again",
         existing_conditions=patch_obj.status["conditions"],
     )
     assert patch_obj.status["conditions"][0]["lastTransitionTime"] == first
@@ -334,7 +351,9 @@ async def test_aipolicy_update_to_copilot_removes_grant():
     patch_obj = MockPatch()
     await on_aipolicy_create(
         spec={"autonomyLevel": 2, "namespaces": ["staging"]},
-        name="p1", patch=patch_obj, status={},
+        name="p1",
+        patch=patch_obj,
+        status={},
     )
     assert get_engine().snapshot()["grants"]
 
@@ -351,7 +370,9 @@ async def test_aipolicy_delete_removes_grant():
     patch_obj = MockPatch()
     await on_aipolicy_create(
         spec={"autonomyLevel": 2, "namespaces": ["staging"]},
-        name="p2", patch=patch_obj, status={},
+        name="p2",
+        patch=patch_obj,
+        status={},
     )
     await on_aipolicy_delete(spec={"autonomyLevel": 2, "namespaces": ["staging"]}, name="p2")
     assert get_engine().snapshot()["grants"] == []
@@ -368,7 +389,10 @@ async def test_aipolicy_grant_confined_to_own_namespace():
     patch_obj = MockPatch()
     await on_aipolicy_create(
         spec={"autonomyLevel": 2, "namespaces": ["staging"]},
-        name="ok-policy", namespace="staging", patch=patch_obj, status={},
+        name="ok-policy",
+        namespace="staging",
+        patch=patch_obj,
+        status={},
     )
     assert patch_obj.status["phase"] == "Active"
     assert {"name": "ok-policy", "namespaces": ["staging"]} in get_engine().snapshot()["grants"]
@@ -383,7 +407,10 @@ async def test_aipolicy_cannot_grant_outside_its_namespace():
     patch_obj = MockPatch()
     await on_aipolicy_create(
         spec={"autonomyLevel": 2, "namespaces": ["dev", "prod"]},
-        name="sneaky", namespace="dev", patch=patch_obj, status={},
+        name="sneaky",
+        namespace="dev",
+        patch=patch_obj,
+        status={},
     )
     assert patch_obj.status["phase"] == "Invalid"
     cond = patch_obj.status["conditions"][0]
@@ -400,13 +427,19 @@ async def test_aipolicy_namespace_escape_revokes_a_prior_grant():
 
     await on_aipolicy_create(
         spec={"autonomyLevel": 2, "namespaces": ["dev"]},
-        name="drift", namespace="dev", patch=MockPatch(), status={},
+        name="drift",
+        namespace="dev",
+        patch=MockPatch(),
+        status={},
     )
     assert get_engine().snapshot()["grants"]
 
     await on_aipolicy_update(
         spec={"autonomyLevel": 2, "namespaces": ["dev", "prod"]},
-        name="drift", namespace="dev", patch=MockPatch(), status={},
+        name="drift",
+        namespace="dev",
+        patch=MockPatch(),
+        status={},
     )
     assert get_engine().snapshot()["grants"] == []
 
@@ -439,8 +472,11 @@ async def test_aipolicy_resume_restores_autopilot_grant():
 
     spec = {"autonomyLevel": 2, "namespaces": ["staging"]}
     await on_aipolicy_create(
-        spec=spec, name="staging-autopilot", namespace="staging",
-        patch=MockPatch(), status={},
+        spec=spec,
+        name="staging-autopilot",
+        namespace="staging",
+        patch=MockPatch(),
+        status={},
     )
     assert get_engine().snapshot()["grants"]
 
@@ -450,8 +486,11 @@ async def test_aipolicy_resume_restores_autopilot_grant():
 
     patch_obj = MockPatch()
     await on_aipolicy_resume(
-        spec=spec, name="staging-autopilot", namespace="staging",
-        patch=patch_obj, status={},
+        spec=spec,
+        name="staging-autopilot",
+        namespace="staging",
+        patch=patch_obj,
+        status={},
     )
     assert patch_obj.status["phase"] == "Active"
     assert {"name": "staging-autopilot", "namespaces": ["staging"]} in (
@@ -470,8 +509,11 @@ async def test_aipolicy_resume_restores_emergency_brake():
 
     patch_obj = MockPatch()
     await on_aipolicy_resume(
-        spec={"autonomyLevel": 0}, name="emergency-stop", namespace="kopilot",
-        patch=patch_obj, status={},
+        spec={"autonomyLevel": 0},
+        name="emergency-stop",
+        namespace="kopilot",
+        patch=patch_obj,
+        status={},
     )
     assert get_engine().snapshot()["observe"] is True
     assert patch_obj.status["phase"] == "Active"
@@ -494,9 +536,7 @@ async def test_aipolicy_resume_is_idempotent_against_create():
         spec=spec, name="qa-pilot", namespace="qa", patch=MockPatch(), status={}
     )
 
-    assert get_engine().snapshot()["grants"] == [
-        {"name": "qa-pilot", "namespaces": ["qa"]}
-    ]
+    assert get_engine().snapshot()["grants"] == [{"name": "qa-pilot", "namespaces": ["qa"]}]
 
 
 @pytest.mark.asyncio
@@ -527,8 +567,10 @@ async def test_aiskill_resume_respects_disabled():
     patch_obj = MockPatch()
     with patch("kopilot.skills.base.get_registry", return_value=registry):
         await on_aiskill_resume(
-            spec=_skill_spec(enabled=False), name="off-skill",
-            patch=patch_obj, status={},
+            spec=_skill_spec(enabled=False),
+            name="off-skill",
+            patch=patch_obj,
+            status={},
         )
 
     assert patch_obj.status["phase"] == "Disabled"
@@ -542,7 +584,9 @@ async def test_aitask_resume_fails_a_task_stuck_executing():
 
     patch_obj = MockPatch()
     await on_aitask_resume(
-        name="stuck", namespace="default", patch=patch_obj,
+        name="stuck",
+        namespace="default",
+        patch=patch_obj,
         status={"phase": "Executing", "taskId": "t-9"},
     )
 
@@ -564,7 +608,9 @@ async def test_aitask_resume_never_re_executes():
     mock_run = _AsyncMock()
     with patch("kopilot.agent.supervisor.run_task", mock_run):
         await on_aitask_resume(
-            name="stuck", namespace="default", patch=MockPatch(),
+            name="stuck",
+            namespace="default",
+            patch=MockPatch(),
             status={"phase": "Executing"},
         )
     mock_run.assert_not_awaited()
@@ -577,7 +623,9 @@ async def test_aitask_resume_leaves_terminal_tasks_untouched(phase):
 
     patch_obj = MockPatch()
     await on_aitask_resume(
-        name="done", namespace="default", patch=patch_obj,
+        name="done",
+        namespace="default",
+        patch=patch_obj,
         status={"phase": phase, "result": "kept"},
     )
     assert patch_obj.status == {}
@@ -589,9 +637,7 @@ async def test_aitask_resume_leaves_an_unstarted_task_to_the_create_handler():
     from kopilot.operator.handlers import on_aitask_resume
 
     patch_obj = MockPatch()
-    await on_aitask_resume(
-        name="fresh", namespace="default", patch=patch_obj, status={}
-    )
+    await on_aitask_resume(name="fresh", namespace="default", patch=patch_obj, status={})
     assert patch_obj.status == {}
 
 
@@ -606,7 +652,10 @@ async def test_aitask_resync_of_in_flight_task_does_not_rerun():
     patch_obj = MockPatch()
     with patch("kopilot.agent.supervisor.run_task", mock_run):
         await on_aitask_update(
-            spec=spec, name="in-flight", namespace="default", patch=patch_obj,
+            spec=spec,
+            name="in-flight",
+            namespace="default",
+            patch=patch_obj,
             status={"phase": "Executing", "specHash": _spec_hash(spec)},
         )
 
@@ -619,14 +668,21 @@ async def test_aitask_spec_change_during_execution_still_reruns():
     """The in-flight guard keys on the spec hash, not on the phase alone."""
     from kopilot.operator.handlers import _spec_hash, on_aitask_update
 
-    mock_run = AsyncMock(return_value={
-        "task_id": "t-3", "answer": "done", "risk_level": "low", "elapsed_ms": 1,
-    })
+    mock_run = AsyncMock(
+        return_value={
+            "task_id": "t-3",
+            "answer": "done",
+            "risk_level": "low",
+            "elapsed_ms": 1,
+        }
+    )
 
     patch_obj = MockPatch()
     with patch("kopilot.agent.supervisor.run_task", mock_run):
         await on_aitask_update(
-            spec={"prompt": "new"}, name="in-flight", namespace="default",
+            spec={"prompt": "new"},
+            name="in-flight",
+            namespace="default",
             patch=patch_obj,
             status={"phase": "Executing", "specHash": _spec_hash({"prompt": "old"})},
         )

@@ -39,6 +39,7 @@ async def test_stop_is_a_no_op_when_never_started():
 async def test_watcher_starts_when_explicitly_enabled(monkeypatch):
     monkeypatch.setenv("WATCHERS_K8S_EVENTS_ENABLED", "true")
     import kopilot.config as cfg_mod
+
     cfg_mod._settings = None
 
     monkeypatch.setattr(K8sEventWatcher, "_load_config", staticmethod(lambda: None))
