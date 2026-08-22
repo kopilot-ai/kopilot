@@ -83,5 +83,12 @@ jobs:
         run: helm push kopilot-*.tgz oci://ghcr.io/kopilot-ai/charts
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      # cosign reads Docker's credential store, not helm's registry config
+      - name: Log in to GHCR for cosign
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Sign OCI chart (keyless)
         run: cosign sign --yes "ghcr.io/kopilot-ai/charts/kopilot:${GITHUB_REF_NAME#v}"
