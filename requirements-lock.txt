@@ -1052,9 +1052,9 @@ langchain-openai==1.6.0 \
     --hash=sha256:648112bbd135aa51d60d4aa2fd4ad353628a8d92a2f8e779244a0d9869a16f18 \
     --hash=sha256:7c545cc1f2bee048a7e219f375b78cd820b32c876ccf825320e25e1e94132577
     # via kopilot (pyproject.toml)
-langchain-protocol==0.0.18 \
-    --hash=sha256:70b53a86fbf9cedc863555effe44da192ab02d556ddbf2cf95b8873adcf41b5a \
-    --hash=sha256:ec3e11782f1ed0c9db38e5a9ed01b0e7a0d3fba406faa8aef6594b73c56a63e6
+langchain-protocol==0.0.19 \
+    --hash=sha256:4cdf879a492a35980fd859ae792d3c65458ccaae504e183c9a10d7eac1f0720f \
+    --hash=sha256:79d90a1425122ac87e8052e2ec054fbd09c3edbf341bdfb6397112a495c7bf8c
     # via
     #   langchain-core
     #   langgraph-sdk
