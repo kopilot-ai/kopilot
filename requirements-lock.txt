@@ -1419,9 +1419,9 @@ ollama==0.6.2 \
     --hash=sha256:3ad7daab28e5a973445c36a73882a3ef698c2ebb00e21e308652741577509f7d \
     --hash=sha256:936d55daa684f474364c098611c933626f8d6c7d67065c5b7ae0c477b508b07f
     # via langchain-ollama
-openai==3.3.1 \
-    --hash=sha256:6f22807de1a976c932cecda620e8172a8c3fdbaeed29c7f21564e0c2410edf56 \
-    --hash=sha256:9652df7fdf8ee6f5bd58e0a12f2b1d414a18e0f06bb7a9a57c8643a5f5469bd3
+openai==3.4.0 \
+    --hash=sha256:6b946c2aef1965559ec2de4e28b56ea278a985ac428369e3aefa6e6a5334b4dc \
+    --hash=sha256:b641bb1e5a9d977530f451bdc8d01e8f4b23df395d49e5428f8fdbce07ac14f0
     # via langchain-openai
 opentelemetry-api==1.44.0 \
     --hash=sha256:67647e5e9566edcf421166fdf022b3537f818635daa852b289e34604dc6fb33a \
