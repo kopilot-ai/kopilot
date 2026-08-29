@@ -682,9 +682,9 @@ google-auth[requests]==2.56.3 \
     --hash=sha256:40e229fc901f0a305b553050e5fce562d509bee0435be053abfa91582b51b90c \
     --hash=sha256:8ec438808f813ad034535000261eed1067475d229d05bbf4216e78c3f2362e53
     # via google-genai
-google-genai==2.19.0 \
-    --hash=sha256:36e0326dd886b52ef765be4c46042732b46b21f637abbe060e3db7c3de23974c \
-    --hash=sha256:d8f4126643793a7de230c396bcd142d21c948c8bb57507580e152549a7a41d9d
+google-genai==2.20.0 \
+    --hash=sha256:49bddeccd29a4e6bf1706c5de67735f7115f537f08b6c36a70b8023c99399095 \
+    --hash=sha256:d382186f024e9050a7a4b25af6eacba9aa16c6e09594f5d1b530f22ff7f9d76f
     # via langchain-google-genai
 greenlet==3.5.5 ; platform_machine == "aarch64" or platform_machine == "ppc64le" or platform_machine == "x86_64" or platform_machine == "amd64" or platform_machine == "AMD64" or platform_machine == "win32" or platform_machine == "WIN32" \
     --hash=sha256:03115c2e0a371999bf8ae616aa8d653f96641d4705c457aebaa187276e9f7537 \
