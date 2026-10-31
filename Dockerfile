@@ -1,5 +1,5 @@
 # python:3.13-slim, digest-pinned; refresh with `docker buildx imagetools inspect python:3.13-slim`
-FROM python:3.13-slim@sha256:ffb752e139c0a19692a43af8d8523b274222dd68eebad5d583b45c2201c6e30a AS base
+FROM python:3.15-slim@sha256:94d3426f1def7db4a106a232ac121bfd975393e5dfd40a619b955fae45fe7913 AS base
 
 ARG KUBECTL_VERSION=v1.36.4
 ARG HELM_VERSION=v3.21.4
